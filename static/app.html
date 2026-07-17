@@ -13,7 +13,7 @@
     (function(){try{var t=localStorage.getItem('Plan-It:theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark');}catch(e){}})();
   </script>
   <link rel="stylesheet" href="/css/app.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%235b6ef5'/><text x='50%25' y='55%25' text-anchor='middle' dy='.1em' fill='white' font-family='system-ui' font-weight='700' font-size='18'>J</text></svg>" />
+  <link rel="icon" type="image/png" href="/plan-it-logo.png" />
 </head>
 <body>
   <!-- Sidebar overlay for mobile -->
@@ -34,7 +34,7 @@
     <!-- Sidebar -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-icon">&#9992;</div>
+        <div class="sidebar-brand-icon"><img src="/plan-it-logo.png" alt="Plan-It" width="32" height="32" /></div>
         <div>
           <div class="sidebar-brand-text">Plan-It</div>
           <div class="sidebar-brand-version">v0.3</div>
