@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan-It — AI-Powered Itinerary Planning, Engineered</title>
+<meta name="description" content="Plan-It is your smart venue companion. Describe your plan for the day in natural language and get a complete minute-by-minute itinerary — zero API keys required.">
+<meta property="og:title" content="Plan-It — AI-Powered Itinerary Planning">
+<meta property="og:description" content="Your smart venue companion — describe your plan for the day, get a complete itinerary. Zero API keys required.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --text: #f1f5f9; --muted: #94a3b8;
+    --accent: #0ea5e9; --accent-bg: #0c4a6e; --accent-text: #7dd3fc;
+    --border: #334155; --green: #22c55e; --amber: #f59e0b;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, #0f172a 0%, #0c4a6e 40%, #0369a1 70%, #0ea5e9 100%);
+    padding: 5rem 2rem 4rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 70% 30%, rgba(14,165,233,0.15) 0%, transparent 50%),
+                radial-gradient(circle at 30% 70%, rgba(3,105,161,0.1) 0%, transparent 50%);
+  }
+  .hero-inner { position: relative; max-width: 800px; margin: 0 auto; }
+  .hero-logo { max-width: 280px; margin-bottom: 2rem; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3)); }
+  .hero h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 700; letter-spacing: -0.02em;
+    margin-bottom: 1rem; line-height: 1.3;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p.tagline {
+    font-size: 1.15rem; color: var(--muted); max-width: 620px;
+    margin: 0 auto 2rem;
+  }
+  .hero .cta-row { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+  .btn-primary {
+    display: inline-block; background: var(--accent); color: #fff;
+    padding: 0.8rem 2rem; border-radius: 999px; font-weight: 600;
+    text-decoration: none; transition: transform 0.2s, box-shadow 0.2s;
+    font-size: 1rem;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(14,165,233,0.3); }
+  .btn-secondary {
+    display: inline-block; background: rgba(255,255,255,0.08); color: #fff;
+    padding: 0.8rem 2rem; border-radius: 999px; font-weight: 600;
+    text-decoration: none; border: 1px solid rgba(255,255,255,0.15);
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s; font-size: 1rem;
+  }
+  .btn-secondary:hover { background: rgba(255,255,255,0.15); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+
+  /* Sections */
+  .container { max-width: 960px; margin: 0 auto; padding: 3rem 1.5rem; }
+
+  .section { margin-bottom: 3rem; }
+  .section h2 {
+    font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem;
+    color: var(--accent-text); border-left: 3px solid var(--accent);
+    padding-left: 0.75rem;
+  }
+  .section p { color: var(--muted); font-size: 1rem; max-width: 700px; margin-bottom: 1.5rem; }
+
+  /* Feature grid */
+  .features { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.25rem; }
+  .features .feature-card { flex: 0 0 260px; max-width: 300px; }
+  .feature-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.5rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .feature-card:hover { border-color: var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+  .feature-card .icon { font-size: 1.8rem; margin-bottom: 0.75rem; }
+  .feature-card h3 { font-size: 1.05rem; margin-bottom: 0.5rem; color: var(--text); }
+  .feature-card p { color: var(--muted); font-size: 0.88rem; margin-bottom: 0; }
+
+  /* Venue type badges */
+  .venue-types {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.6rem;
+    margin: 1.5rem 0;
+  }
+  .venue-badge {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.55rem 0.9rem;
+    font-size: 0.85rem; color: var(--accent-text); font-weight: 500;
+    transition: background 0.2s, border-color 0.2s;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .venue-badge:hover { background: var(--accent-bg); border-color: var(--accent); }
+
+  /* Pipeline / code preview */
+  .code-preview {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 2rem;
+    margin-top: 1rem; overflow: hidden;
+  }
+  .code-preview code {
+    color: var(--accent-text); font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 0.85rem; line-height: 1.8;
+  }
+
+  /* Value prop */
+  .value-prop {
+    background: linear-gradient(135deg, var(--surface), #0c4a6e);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 2rem; text-align: center;
+  }
+  .value-prop blockquote {
+    font-size: 1.15rem; font-style: italic; color: var(--text);
+    max-width: 650px; margin: 0 auto 1.5rem;
+  }
+  .value-prop blockquote::before { content: '\201C'; font-size: 3rem; color: var(--accent); line-height: 0; vertical-align: -0.4em; margin-right: 0.25rem; }
+  .value-prop blockquote::after { content: '\201D'; font-size: 3rem; color: var(--accent); line-height: 0; vertical-align: -0.4em; margin-left: 0.25rem; }
+
+  /* Footer */
+  footer {
+    text-align: center; color: var(--muted); font-size: 0.85rem;
+    padding: 2rem 1.5rem; border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+  footer a { color: var(--accent-text); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .hero { padding: 3rem 1rem 2.5rem; }
+    .hero-logo { max-width: 180px; }
+    .hero h1 { font-size: 1.6rem; }
+    .hero p.tagline { font-size: 0.95rem; padding: 0 0.5rem; }
+    .cta-row { flex-direction: column; align-items: center; }
+    .btn-primary, .btn-secondary { width: 100%; max-width: 320px; text-align: center; }
+    .container { padding: 2rem 1rem; }
+    .section h2 { font-size: 1.25rem; }
+    .section p { font-size: 0.9rem; }
+    .features { justify-content: center; }
+    .features .feature-card { flex: 0 0 100%; max-width: 100%; }
+    .venue-types { grid-template-columns: repeat(2, 1fr); }
+    .code-preview { padding: 1rem; }
+    .code-preview code { font-size: 0.68rem; }
+    .value-prop { padding: 1.5rem 1rem; }
+    .value-prop blockquote { font-size: 0.95rem; }
+    footer { font-size: 0.8rem; padding: 1.5rem 1rem; }
+  }
+
+  @media (max-width: 480px) {
+    .hero { padding: 2rem 0.75rem 1.75rem; }
+    .hero h1 { font-size: 1.35rem; }
+    .hero p.tagline { font-size: 0.85rem; }
+    .container { padding: 1.25rem 0.75rem; }
+    .section { margin-bottom: 2rem; }
+    .section h2 { font-size: 1.1rem; }
+    .feature-card { padding: 1rem; }
+    .feature-card h3 { font-size: 0.95rem; }
+    .feature-card p { font-size: 0.82rem; }
+    .venue-types { grid-template-columns: 1fr 1fr; }
+    .venue-badge { font-size: 0.75rem; padding: 0.4rem 0.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-inner">
+    <img src="/plan-it-logo.png" alt="Plan-It" class="hero-logo" onerror="this.style.display='none'">
+    <h1>Your <span>smart venue companion</span> — describe your plan for the day, get a complete itinerary.</h1>
+    <p class="tagline">
+      Plan-It transforms your day-of plans into minute-by-minute itineraries optimized for theme parks, museums, festivals, city tours, and more. No API keys. No signups. Just tell it where you're going and what you want to do.
+    </p>
+    <div class="cta-row">
+      <a href="/app" class="btn-primary" target="_blank" rel="noopener">Launch Plan-It</a>
+      <a href="#features" class="btn-secondary">Explore Features</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- What It Is -->
+  <div class="section" id="features">
+    <h2>What Plan-It Does</h2>
+    <p>
+      It's not a generic travel search engine. Plan-It is a <strong>self-contained AI itinerary planner</strong> that runs locally on your machine. Describe your trip in plain English — <em>"a full day at Magic Kingdom with two kids ages 5 and 8, arriving at rope drop, need lunch at Be Our Guest"</em> — and it produces a complete schedule with ride wait times, meal stops, and travel buffers.
+    </p>
+  </div>
+
+  <!-- Venue Types -->
+  <div class="section">
+    <h2>Venues Plan-It Understands</h2>
+    <div class="venue-types">
+      <span class="venue-badge">🏰 Theme Parks</span>
+      <span class="venue-badge">🏛️ Museums</span>
+      <span class="venue-badge">🌲 National Parks</span>
+      <span class="venue-badge">🏙️ City Tours</span>
+      <span class="venue-badge">🎪 Festivals</span>
+      <span class="venue-badge">🦁 Zoos & Aquariums</span>
+      <span class="venue-badge">🚗 Road Trips</span>
+      <span class="venue-badge">🏖️ Beach Days</span>
+    </div>
+    <p style="margin-top:1rem">Plan-It auto-classifies your destination into the right venue type — adjusting opening hours, attraction pacing, and departure times automatically. 40+ pre-vetted venues with specific ride and exhibit names baked in: Disney World, Universal Studios, SeaWorld, Kennedy Space Center, The Louvre, The Met, Smithsonian, Yellowstone, and more.</p>
+  </div>
+
+  <!-- Feature Grid -->
+  <div class="section">
+    <h2>Core Capabilities</h2>
+    <div class="features">
+      <div class="feature-card">
+        <div class="icon">🧠</div>
+        <h3>Natural Language Planning</h3>
+        <p>Type your trip like you'd describe it to a friend. Plan-It parses intent, extracts destinations, party size, preferences, and constraints automatically.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">⏱️</div>
+        <h3>Minute-by-Minute Schedules</h3>
+        <p>Every itinerary includes specific arrival times, ride/attraction order, estimated wait times scaled by time of day, meal breaks, and travel buffers between stops.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🗺️</div>
+        <h3>Curated Knowledge Base</h3>
+        <p>40+ pre-vetted venues with real attraction names — not generic placeholders. Multi-tiered matching with 5 fallback strategies when exact venues aren't found.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🌐</div>
+        <h3>Live Web Research</h3>
+        <p>Zero API key DuckDuckGo research for restaurants, hotels, and current venue info. 70+ hotel chain validations and 18 cuisine types for dining recommendations.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🚦</div>
+        <h3>Traffic & Alert Intelligence</h3>
+        <p>Pattern-matched corridor warnings for I-4 Orlando, I-95 Miami, Atlanta metro, and Tampa Bay — with rush-hour estimates. OSRM real road-network routing for actual drive times.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">✏️</div>
+        <h3>Inline Schedule Editing</h3>
+        <p>Drag, reorder, add, or remove stops. PATCH-based editing with UUID-keyed plan storage. Inline reminders and AM/PM departure time toggles.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🤖</div>
+        <h3>Optional DeepSeek AI</h3>
+        <p>Enhanced planning via DeepSeek LLM (deepseek-chat, deepseek-reasoner). Multi-agent framework for specialized planning tasks. Fully optional — core features work offline.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">💻</div>
+        <h3>Cross-Platform CLI</h3>
+        <p>Single-command serve with <code>plan-it serve</code>. Auto-start via launchd (macOS), systemd (Linux), or Scheduled Task (Windows). Works on Android (Termux) and iOS (iSH).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Itinerary Preview -->
+  <div class="section">
+    <h2>From a Sentence to a Complete Itinerary</h2>
+    <div class="code-preview">
+      <code>
+<span style="color:var(--muted)"># You type:</span><br>
+A full day at Magic Kingdom with two kids ages 5 and 8. We arrive at rope drop.<br>
+Lunch at Be Our Guest. Must ride Seven Dwarfs Mine Train and Space Mountain.<br><br>
+<span style="color:var(--muted)"># Plan-It produces:</span><br>
+┌──────────────────────────────────────────────────────┐<br>
+│ <strong>Magic Kingdom — Full Day Itinerary</strong>               │<br>
+│ Party: 2 adults, 2 children (5, 8)                   │<br>
+├──────────────────────────────────────────────────────┤<br>
+│  7:45 AM — Arrive at Transportation & Ticket Center  │<br>
+│  8:00 AM — Rope drop — head to Seven Dwarfs Mine     │<br>
+│  8:15 AM — Seven Dwarfs Mine Train (15 min wait)     │<br>
+│  8:45 AM — Peter Pan's Flight (20 min wait)          │<br>
+│  9:15 AM — The Many Adventures of Winnie the Pooh    │<br>
+│ 10:00 AM — Under the Sea ~ Journey of the Little     │<br>
+│            Mermaid (10 min wait)                     │<br>
+│ 10:30 AM — Dumbo the Flying Elephant                 │<br>
+│ 11:00 AM — Snack break — Storybook Treats            │<br>
+│ 11:30 AM — Space Mountain (25 min wait)              │<br>
+│ 12:15 PM — Lunch — Be Our Guest Restaurant 🍽️       │<br>
+│  1:30 PM — Enchanted Tales with Belle                │<br>
+│  2:15 PM — Festival of Fantasy Parade viewing        │<br>
+│  3:00 PM — Big Thunder Mountain Railroad             │<br>
+│  3:45 PM — Splash Mountain (if open seasonally)      │<br>
+│  4:30 PM — Refreshment break — Aloha Isle (Dole Whip)│<br>
+│  5:00 PM — Jungle Cruise                              │<br>
+│  5:45 PM — Pirates of the Caribbean                  │<br>
+│  6:30 PM — Dinner — Columbia Harbour House           │<br>
+│  7:30 PM — Buzz Lightyear's Space Ranger Spin        │<br>
+│  8:15 PM — Find spot for Happily Ever After fireworks│<br>
+│  8:30 PM — Happily Ever After Fireworks 🎆           │<br>
+│  9:15 PM — Exit park — monorail/ferry to parking     │<br>
+└──────────────────────────────────────────────────────┘<br>
+<span style="color:var(--muted)"># Every stop has actual venue names, real wait-time estimates,</span><br>
+<span style="color:var(--muted)"># and built-in travel buffers between attractions.</span>
+      </code>
+    </div>
+  </div>
+
+  <!-- Value Proposition -->
+  <div class="value-prop">
+    <blockquote>
+      I don't wander through parks hoping to stumble onto good experiences. I run a structured itinerary — every ride, every meal, every buffer planned. Plan-It turns trip planning from a chaotic Google spiral into a disciplined engineering process.
+    </blockquote>
+    <p style="color:var(--muted);font-size:0.9rem">Built for families, solo travelers, and anyone who wants to maximize every minute at their destination.</p>
+  </div>
+
+</main>
+
+<footer>
+  <p>
+    <strong>Plan-It</strong> — Open source under MIT License.
+  </p>
+  <p style="margin-top:0.75rem">
+    <a href="https://elevated-applicant.vercel.app/career-portfolio" style="font-weight:600">👤 Jeff Sturm — Career Portfolio</a>
+    &middot;
+    <a href="https://www.linkedin.com/in/jeff-sturm-8830aa27/" target="_blank" rel="noopener">LinkedIn Profile ↗</a>
+  </p>
+  <p style="margin-top:0.5rem">No telemetry. No cloud. No accounts. Just a local itinerary engine for your next trip.</p>
+</footer>
+
+
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>

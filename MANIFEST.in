@@ -1,0 +1,24 @@
+include README.md
+include LICENSE
+include requirements.txt
+include .env.example
+include pyproject.toml
+include install.sh
+include install.ps1
+
+recursive-include app *.py
+recursive-include static *.html
+recursive-include static/css *.css
+recursive-include static/js *.js
+
+exclude .env
+exclude __pycache__
+exclude *.pyc
+exclude *.pyo
+exclude .gitignore
+
+prune .git
+prune .venv
+prune venv
+prune .pytest_cache
+prune __pycache__

@@ -1,0 +1,25 @@
+# Environment files (contain API keys and secrets)
+.env
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Distribution
+dist/
+*.egg-info/
+.vercel

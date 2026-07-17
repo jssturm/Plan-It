@@ -1,0 +1,406 @@
+"""
+Real-world drive times and geocoding — no API keys, no rate limits.
+
+Rather than relying on external APIs (Nominatim rate-limits, DuckDuckGo
+snippets lack numeric durations), this module uses a comprehensive
+lookup table of real-world drive times between common city pairs and
+smart city-name extraction from street addresses.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import urllib.parse
+
+logger = logging.getLogger("plan-it.osrm")
+
+
+# ---------------------------------------------------------------------------
+# City extraction from full addresses
+# ---------------------------------------------------------------------------
+
+# Known city names that appear in full addresses. Used to extract a city
+# from composite origin strings like "Hyatt Regency Orlando, 9801 International Dr"
+# so the known-drive-time table can match on city pairs.
+_CITY_NAMES: list[tuple[str, str]] = [
+    # (lowercase slug, display name)
+    ("orlando", "Orlando"),
+    ("tampa", "Tampa"),
+    ("jacksonville", "Jacksonville"),
+    ("miami", "Miami"),
+    ("atlanta", "Atlanta"),
+    ("nashville", "Nashville"),
+    ("charlotte", "Charlotte"),
+    ("savannah", "Savannah"),
+    ("tallahassee", "Tallahassee"),
+    ("gainesville", "Gainesville"),
+    ("daytona beach", "Daytona Beach"),
+    ("west palm beach", "West Palm Beach"),
+    ("fort lauderdale", "Fort Lauderdale"),
+    ("fort myers", "Fort Myers"),
+    ("sarasota", "Sarasota"),
+    ("lakeland", "Lakeland"),
+    ("st augustine", "St. Augustine"),
+    ("st petersburg", "St. Petersburg"),
+    ("clearwater", "Clearwater"),
+    ("melbourne", "Melbourne"),
+    ("port st lucie", "Port St. Lucie"),
+    ("panama city", "Panama City"),
+    ("pensacola", "Pensacola"),
+    ("destin", "Destin"),
+    ("key west", "Key West"),
+    ("naples", "Naples"),
+    ("boca raton", "Boca Raton"),
+    ("delray beach", "Delray Beach"),
+    ("winter park", "Winter Park"),
+    ("sanford", "Sanford"),
+    ("kissimmee", "Kissimmee"),
+    ("new york", "New York"),
+    ("los angeles", "Los Angeles"),
+    ("chicago", "Chicago"),
+    ("houston", "Houston"),
+    ("phoenix", "Phoenix"),
+    ("philadelphia", "Philadelphia"),
+    ("san diego", "San Diego"),
+    ("dallas", "Dallas"),
+    ("austin", "Austin"),
+    ("san antonio", "San Antonio"),
+    ("las vegas", "Las Vegas"),
+    ("denver", "Denver"),
+    ("seattle", "Seattle"),
+    ("portland", "Portland"),
+    ("boston", "Boston"),
+    ("san francisco", "San Francisco"),
+    ("washington dc", "Washington DC"),
+    ("washington", "Washington"),
+    ("paris", "Paris"),
+    ("london", "London"),
+    ("tokyo", "Tokyo"),
+    ("singapore", "Singapore"),
+    ("orlando fl", "Orlando"),
+    ("tampa fl", "Tampa"),
+    ("jacksonville fl", "Jacksonville"),
+    ("miami fl", "Miami"),
+    ("atlanta ga", "Atlanta"),
+    ("orlando florida", "Orlando"),
+    ("tampa florida", "Tampa"),
+    ("jacksonville florida", "Jacksonville"),
+    ("miami florida", "Miami"),
+    ("atlanta georgia", "Atlanta"),
+]
+
+
+def extract_city(text: str) -> str | None:
+    """Extract a known city name from a free-text origin string.
+
+    Returns the lowercase city slug, or None if no known city is found.
+    """
+    text_lower = text.lower()
+    # Sort by length descending so longer matches win (e.g. "west palm beach" before "palm")
+    for slug, display in sorted(_CITY_NAMES, key=lambda x: -len(x[0])):
+        if slug in text_lower:
+            # Check it's a whole-word match (avoid matching "orlando" inside "orlandos")
+            # by checking word boundaries around the match position
+            idx = text_lower.find(slug)
+            if idx >= 0:
+                before_ok = idx == 0 or not text_lower[idx - 1].isalpha()
+                after_ok = idx + len(slug) >= len(text_lower) or not text_lower[idx + len(slug)].isalpha()
+                if before_ok and after_ok:
+                    return slug.split()[0]  # Return just the primary city name
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Comprehensive drive-time lookup table
+# ---------------------------------------------------------------------------
+
+# Real-world driving times between common city/venue pairs.
+# Measured in minutes for precision, formatted as human-readable strings.
+# Covers Florida, major US cities, and international pairs.
+_DRIVE_TIMES: dict[tuple[str, str], str] = {
+    # === Florida intra-state ===
+    ("jacksonville", "tampa"): "3 hours",
+    ("tampa", "jacksonville"): "3 hours",
+    ("jacksonville", "orlando"): "2 hours 15 minutes",
+    ("orlando", "jacksonville"): "2 hours 15 minutes",
+    ("orlando", "tampa"): "1 hour 15 minutes",
+    ("tampa", "orlando"): "1 hour 15 minutes",
+    ("orlando", "miami"): "3 hours 30 minutes",
+    ("miami", "orlando"): "3 hours 30 minutes",
+    ("tampa", "miami"): "4 hours",
+    ("miami", "tampa"): "4 hours",
+    ("jacksonville", "miami"): "5 hours 15 minutes",
+    ("miami", "jacksonville"): "5 hours 15 minutes",
+    ("orlando", "daytona beach"): "1 hour",
+    ("daytona beach", "orlando"): "1 hour",
+    ("tampa", "sarasota"): "1 hour",
+    ("sarasota", "tampa"): "1 hour",
+    ("orlando", "west palm beach"): "2 hours 30 minutes",
+    ("west palm beach", "orlando"): "2 hours 30 minutes",
+    ("tampa", "fort myers"): "2 hours",
+    ("fort myers", "tampa"): "2 hours",
+    ("orlando", "fort lauderdale"): "3 hours",
+    ("fort lauderdale", "orlando"): "3 hours",
+    ("jacksonville", "savannah"): "2 hours",
+    ("savannah", "jacksonville"): "2 hours",
+    ("jacksonville", "tallahassee"): "2 hours 30 minutes",
+    ("tallahassee", "jacksonville"): "2 hours 30 minutes",
+    ("orlando", "lakeland"): "45 minutes",
+    ("lakeland", "orlando"): "45 minutes",
+    ("tampa", "lakeland"): "40 minutes",
+    ("lakeland", "tampa"): "40 minutes",
+    ("orlando", "gainesville"): "1 hour 45 minutes",
+    ("gainesville", "orlando"): "1 hour 45 minutes",
+    ("tampa", "clearwater"): "30 minutes",
+    ("clearwater", "tampa"): "30 minutes",
+    ("miami", "key west"): "3 hours 30 minutes",
+    ("key west", "miami"): "3 hours 30 minutes",
+    ("orlando", "kissimmee"): "30 minutes",
+    ("kissimmee", "orlando"): "30 minutes",
+    ("jacksonville", "st augustine"): "45 minutes",
+    ("st augustine", "jacksonville"): "45 minutes",
+    ("orlando", "sanford"): "30 minutes",
+    ("sanford", "orlando"): "30 minutes",
+    ("tampa", "st petersburg"): "25 minutes",
+    ("st petersburg", "tampa"): "25 minutes",
+    ("orlando", "st petersburg"): "1 hour 30 minutes",
+    ("st petersburg", "orlando"): "1 hour 30 minutes",
+    ("orlando", "melbourne"): "1 hour 15 minutes",
+    ("melbourne", "orlando"): "1 hour 15 minutes",
+    ("miami", "naples"): "2 hours",
+    ("naples", "miami"): "2 hours",
+    ("miami", "boca raton"): "45 minutes",
+    ("boca raton", "miami"): "45 minutes",
+    ("orlando", "port st lucie"): "1 hour 45 minutes",
+    ("port st lucie", "orlando"): "1 hour 45 minutes",
+    ("tampa", "naples"): "2 hours 15 minutes",
+    ("naples", "tampa"): "2 hours 15 minutes",
+    ("panama city", "destin"): "45 minutes",
+    ("destin", "panama city"): "45 minutes",
+    ("destin", "pensacola"): "1 hour",
+    ("pensacola", "destin"): "1 hour",
+    ("winter park", "orlando"): "15 minutes",
+    ("orlando", "winter park"): "15 minutes",
+
+    # === Florida → Georgia ===
+    ("atlanta", "orlando"): "6 hours 30 minutes",
+    ("orlando", "atlanta"): "6 hours 30 minutes",
+    ("atlanta", "tampa"): "6 hours 30 minutes",
+    ("tampa", "atlanta"): "6 hours 30 minutes",
+    ("atlanta", "jacksonville"): "5 hours",
+    ("jacksonville", "atlanta"): "5 hours",
+    ("atlanta", "miami"): "9 hours",
+    ("miami", "atlanta"): "9 hours",
+
+    # === Florida → other Southeast ===
+    ("orlando", "charlotte"): "7 hours",
+    ("charlotte", "orlando"): "7 hours",
+    ("orlando", "nashville"): "10 hours",
+    ("nashville", "orlando"): "10 hours",
+    ("tampa", "nashville"): "10 hours 30 minutes",
+    ("nashville", "tampa"): "10 hours 30 minutes",
+
+    # === Major US city pairs ===
+    ("new york", "boston"): "3 hours 45 minutes",
+    ("boston", "new york"): "3 hours 45 minutes",
+    ("new york", "philadelphia"): "1 hour 45 minutes",
+    ("philadelphia", "new york"): "1 hour 45 minutes",
+    ("new york", "washington"): "4 hours",
+    ("washington", "new york"): "4 hours",
+    ("new york", "washington dc"): "4 hours",
+    ("washington dc", "new york"): "4 hours",
+    ("los angeles", "san diego"): "2 hours",
+    ("san diego", "los angeles"): "2 hours",
+    ("los angeles", "san francisco"): "5 hours 45 minutes",
+    ("san francisco", "los angeles"): "5 hours 45 minutes",
+    ("los angeles", "las vegas"): "4 hours",
+    ("las vegas", "los angeles"): "4 hours",
+    ("dallas", "austin"): "3 hours",
+    ("austin", "dallas"): "3 hours",
+    ("dallas", "houston"): "3 hours 30 minutes",
+    ("houston", "dallas"): "3 hours 30 minutes",
+    ("austin", "san antonio"): "1 hour 15 minutes",
+    ("san antonio", "austin"): "1 hour 15 minutes",
+    ("san francisco", "portland"): "10 hours",
+    ("portland", "san francisco"): "10 hours",
+    ("seattle", "portland"): "3 hours",
+    ("portland", "seattle"): "3 hours",
+    ("chicago", "denver"): "14 hours 30 minutes",
+    ("denver", "chicago"): "14 hours 30 minutes",
+    ("phoenix", "las vegas"): "4 hours 30 minutes",
+    ("las vegas", "phoenix"): "4 hours 30 minutes",
+    ("phoenix", "san diego"): "5 hours 30 minutes",
+    ("san diego", "phoenix"): "5 hours 30 minutes",
+
+    # === Venue-level (theme parks resolved to their city) ===
+    # Busch Gardens
+    ("orlando", "busch gardens"): "1 hour 15 minutes",
+    ("busch gardens", "orlando"): "1 hour 15 minutes",
+    ("tampa", "busch gardens"): "15 minutes",
+    ("busch gardens", "tampa"): "15 minutes",
+    ("jacksonville", "busch gardens"): "3 hours",
+    ("busch gardens", "jacksonville"): "3 hours",
+    ("miami", "busch gardens"): "4 hours",
+    ("busch gardens", "miami"): "4 hours",
+    ("atlanta", "busch gardens"): "6 hours 30 minutes",
+    ("busch gardens", "atlanta"): "6 hours 30 minutes",
+    ("lakeland", "busch gardens"): "40 minutes",
+    ("busch gardens", "lakeland"): "40 minutes",
+
+    # Walt Disney World (in Orlando/Kissimmee)
+    ("orlando", "walt disney world"): "25 minutes",
+    ("walt disney world", "orlando"): "25 minutes",
+    ("tampa", "walt disney world"): "1 hour 15 minutes",
+    ("walt disney world", "tampa"): "1 hour 15 minutes",
+    ("jacksonville", "walt disney world"): "2 hours 30 minutes",
+    ("walt disney world", "jacksonville"): "2 hours 30 minutes",
+    ("miami", "walt disney world"): "3 hours 30 minutes",
+    ("walt disney world", "miami"): "3 hours 30 minutes",
+    ("orlando", "disney"): "25 minutes",
+    ("disney", "orlando"): "25 minutes",
+    ("tampa", "disney"): "1 hour 15 minutes",
+    ("disney", "tampa"): "1 hour 15 minutes",
+    ("orlando", "epcot"): "25 minutes",
+    ("epcot", "orlando"): "25 minutes",
+    ("orlando", "magic kingdom"): "30 minutes",
+    ("magic kingdom", "orlando"): "30 minutes",
+    ("orlando", "disney's hollywood studios"): "25 minutes",
+    ("disney's hollywood studios", "orlando"): "25 minutes",
+    ("orlando", "disney's animal kingdom"): "30 minutes",
+    ("disney's animal kingdom", "orlando"): "30 minutes",
+    ("orlando", "disneyland"): "25 minutes",
+    ("disneyland", "orlando"): "25 minutes",
+    ("kissimmee", "walt disney world"): "15 minutes",
+    ("walt disney world", "kissimmee"): "15 minutes",
+
+    # Universal Studios (Orlando area)
+    ("orlando", "universal studios"): "15 minutes",
+    ("universal studios", "orlando"): "15 minutes",
+    ("orlando", "universal islands of adventure"): "15 minutes",
+    ("universal islands of adventure", "orlando"): "15 minutes",
+    ("tampa", "universal studios"): "1 hour 15 minutes",
+    ("universal studios", "tampa"): "1 hour 15 minutes",
+    ("orlando", "universal"): "15 minutes",
+    ("universal", "orlando"): "15 minutes",
+
+    # SeaWorld Orlando
+    ("orlando", "seaworld orlando"): "15 minutes",
+    ("seaworld orlando", "orlando"): "15 minutes",
+    ("orlando", "seaworld"): "15 minutes",
+    ("seaworld", "orlando"): "15 minutes",
+
+    # Kennedy Space Center (near Titusville)
+    ("orlando", "kennedy space center"): "45 minutes",
+    ("kennedy space center", "orlando"): "45 minutes",
+    ("tampa", "kennedy space center"): "2 hours",
+    ("kennedy space center", "tampa"): "2 hours",
+    ("jacksonville", "kennedy space center"): "2 hours",
+    ("kennedy space center", "jacksonville"): "2 hours",
+    ("miami", "kennedy space center"): "3 hours",
+    ("kennedy space center", "miami"): "3 hours",
+
+    # === International (approximate, used for context) ===
+    ("london", "paris"): "6 hours (with Eurotunnel)",
+    ("paris", "london"): "6 hours (with Eurotunnel)",
+}
+
+
+# Maps venue/attraction names to their home city for city-to-city lookup.
+# When the lookup table has ("orlando", "universal studios") but the
+# origin is Jacksonville, resolving the venue to its city first allows
+# the Jacksonville→Orlando pairing to match.
+_VENUE_HOME_CITY: dict[str, str] = {
+    "busch gardens": "tampa",
+    "walt disney world": "orlando",
+    "disney": "orlando",
+    "disneyland": "orlando",
+    "epcot": "orlando",
+    "magic kingdom": "orlando",
+    "disney's hollywood studios": "orlando",
+    "disney's animal kingdom": "orlando",
+    "universal studios": "orlando",
+    "universal islands of adventure": "orlando",
+    "universal": "orlando",
+    "seaworld orlando": "orlando",
+    "seaworld": "orlando",
+    "kennedy space center": "orlando",
+    "san diego zoo": "san diego",
+    "bronx zoo": "new york",
+    "cedar point": "cleveland",
+    "six flags over georgia": "atlanta",
+}
+
+
+def lookup_drive_time(origin: str, destination: str) -> str | None:
+    """Look up a known real-world drive time between two locations.
+
+    Handles both city-level names and full addresses by extracting
+    city names from composite strings first. Venue names (e.g.
+    "Universal Studios") are resolved to their home city so that
+    any origin city can match via city-to-city pairs.
+
+    Returns a human-readable drive time string, or None if no match.
+    """
+    origin_lower = origin.lower()
+    dest_lower = destination.lower()
+
+    # Try extracting city names from full addresses
+    origin_city = extract_city(origin)
+    dest_city = extract_city(destination)
+
+    # Resolve venue names to their home city (e.g. "Universal Studios" → "orlando")
+    # This allows any origin city to match via city-to-city pairs.
+    for venue_name, home_city in _VENUE_HOME_CITY.items():
+        if venue_name in dest_lower:
+            dest_city = home_city
+            logger.info("Venue resolution: %s → %s", destination[:40], home_city)
+            break
+        if venue_name in origin_lower:
+            origin_city = home_city
+            logger.info("Venue resolution: %s → %s", origin[:40], home_city)
+            break
+
+    # Build a list of candidate origin/destination slugs to try
+    origin_candidates = set()
+    dest_candidates = set()
+
+    if origin_city:
+        origin_candidates.add(origin_city)
+    if dest_city:
+        dest_candidates.add(dest_city)
+
+    # Also try the raw input as a slug (works for "Jacksonville", "Tampa", etc.)
+    origin_raw = origin_lower.split(",")[0].strip()
+    dest_raw = dest_lower.split(",")[0].strip()
+    origin_candidates.add(origin_raw)
+    dest_candidates.add(dest_raw.lower())
+
+    # Also try the resolved city name as a raw candidate
+    if dest_city:
+        dest_candidates.add(dest_city)
+    if origin_city:
+        origin_candidates.add(origin_city)
+
+    # Search the lookup table
+    for o in origin_candidates:
+        for d in dest_candidates:
+            if (o, d) in _DRIVE_TIMES:
+                logger.info("Drive time match: (%s, %s) → %s", o, d, _DRIVE_TIMES[(o, d)])
+                return _DRIVE_TIMES[(o, d)]
+            if (d, o) in _DRIVE_TIMES:
+                logger.info("Drive time match (reversed): (%s, %s) → %s", d, o, _DRIVE_TIMES[(d, o)])
+                return _DRIVE_TIMES[(d, o)]
+
+    # Substring match as final attempt
+    for (a, b), drive_str in _DRIVE_TIMES.items():
+        for o in origin_candidates:
+            for d in dest_candidates:
+                if (a in o or o in a) and (b in d or d in b):
+                    logger.info("Drive time substring match: (%s ∈ %s, %s ∈ %s) → %s", o, a, d, b, drive_str)
+                    return drive_str
+                if (a in d or d in a) and (b in o or o in b):
+                    logger.info("Drive time substring match (reversed): (%s ∈ %s, %s ∈ %s) → %s", d, a, o, b, drive_str)
+                    return drive_str
+
+    return None

@@ -1,0 +1,63 @@
+[build-system]
+requires      = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name           = "plan-it"
+version        = "0.3.0"
+description    = "Plan-It — self-contained AI-powered travel itinerary builder — zero API keys, runs entirely locally"
+readme         = "README.md"
+license        = { text = "MIT" }
+authors        = [{ name = "Jeff Sturm", email = "jssturm@protonmail.com" }]
+keywords       = ["travel", "itinerary", "planner", "ai", "duckduckgo", "self-contained", "fastapi"]
+classifiers    = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: JavaScript",
+  "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+  "Topic :: Travel",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+]
+requires-python = ">=3.12"
+dependencies    = [
+  "fastapi>=0.115.0,<1.0.0",
+  "uvicorn>=0.30.0,<1.0.0",
+  "python-dotenv>=1.0.0,<2.0.0",
+  "pydantic>=2.0.0,<3.0.0",
+  "ddgs>=9.0",
+  "slowapi>=0.1.9,<1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0,<9.0.0",
+  "pytest-asyncio>=0.24.0,<1.0.0",
+  "httpx>=0.27.0,<1.0.0",
+]
+
+[project.urls]
+Homepage    = "https://github.com/jssturm/Plan-It"
+Repository  = "https://github.com/jssturm/Plan-It"
+Issues      = "https://github.com/jssturm/Plan-It/issues"
+
+[project.scripts]
+plan-it = "app.cli:main"
+
+[project.gui-scripts]
+plan-it-gui = "app.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app", "app.*"]
+
+[tool.setuptools.package-data]
+app = ["../static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths   = ["."]
+python_files = ["test_*.py"]

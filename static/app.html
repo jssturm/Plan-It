@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="app.name">Plan-It</title>
+  <meta name="description" content="Plan-It — AI-powered travel itinerary builder for theme parks, museums, city tours, and more." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%235b6ef5'/><text x='50%25' y='55%25' text-anchor='middle' dy='.1em' fill='white' font-family='system-ui' font-weight='700' font-size='18'>J</text></svg>" />
+</head>
+<body>
+  <!-- Sidebar overlay for mobile -->
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+  <!-- Bug Report FAB (floating action button) -->
+  <div id="bug-report-fab" class="bug-report-fab">
+    <span class="bug-report-fab-badge">· alpha</span>
+    <button id="btn-bug-report" class="bug-report-fab-btn" data-i18n-html="bug.fab">
+      🐛 Report a bug
+    </button>
+  </div>
+
+  <!-- =======================================================================
+       App Shell
+       ======================================================================= -->
+  <div id="app" class="app-shell">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">&#9992;</div>
+        <div>
+          <div class="sidebar-brand-text">Plan-It</div>
+          <div class="sidebar-brand-version">v0.3</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="/" class="home-btn" data-tooltip="Return to the main home page" data-i18n-html="nav.home">
+          🏠 Home
+        </a>
+
+        <div class="sidebar-nav-label" data-i18n="nav.plan">Plan</div>
+
+        <button class="nav-item active" data-page="new-trip">
+          <span class="nav-item-icon">&#43;</span>
+          <span data-i18n="nav.newTrip">New Trip</span>
+        </button>
+
+        <button class="nav-item" data-page="my-plans">
+          <span class="nav-item-icon">&#128203;</span>
+          <span data-i18n="nav.myPlans">My Plans</span>
+          <span class="nav-item-badge" id="plan-count-badge" style="display:none">0</span>
+        </button>
+
+        <div class="sidebar-nav-label mt-4" data-i18n="nav.savedPlan">Saved Plan</div>
+        <div id="sidebar-saved-plans">
+          <div class="text-xs text-muted" style="padding: var(--space-2) var(--space-3);" data-i18n="nav.noSavedPlans">
+            No saved plans yet
+          </div>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-lang">
+          <label class="sidebar-lang-label" data-i18n="lang.label">🌐 Language</label>
+          <select id="lang-selector" class="lang-selector" aria-label="Select language">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+        </div>
+        <div class="health-indicator">
+          <span id="health-dot" class="health-dot"></span>
+          <span id="health-label" data-i18n="health.checking">API checking...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <button class="btn-icon mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle menu">
+          &#9776;
+        </button>
+        <span class="topbar-title" id="topbar-title" data-i18n="topbar.newTrip">New Trip</span>
+        <div class="topbar-actions">
+          <button class="btn btn-sm btn-secondary" id="btn-clear-store" data-i18n-title="confirm.clearTitle" title="Clear all saved plans" data-i18n-html="topbar.clearAll">&#128465; Clear All</button>
+        </div>
+      </header>
+
+      <!-- Page: New Trip -->
+      <section id="page-new-trip" class="page">
+        <div class="page-header">
+          <h2 data-i18n="newTrip.title">Plan Your Trip</h2>
+          <p data-i18n="newTrip.subtitle">Describe your plan for the day — where you're going, what you want to do — and get a complete itinerary with route maps, schedule, and operational intelligence.</p>
+        </div>
+
+        <div class="card" style="max-width:720px;">
+          <div class="form-group">
+              <label class="form-label" for="trip-input" data-i18n="newTrip.whatsYourTrip">What's your trip?</label>
+              <textarea id="trip-input" class="form-textarea" rows="8"
+                data-i18n-placeholder="newTrip.tripPlaceholder"
+                placeholder="e.g. Drive to Kennedy Space Center from Orlando tomorrow — stop for lunch, stay overnight at a hotel near Cocoa Beach, and drive back the next morning. Need long-term parking at KSC."></textarea>
+              <div class="form-hint" data-i18n="newTrip.tripHint">Include as many details as possible — venue, date, mode of travel (drive/fly), meal stops, hotel stays, long-term parking, return trip, and any special interests. The more you tell us, the better your itinerary.</div>
+          </div>
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label" for="trip-departure" data-i18n="newTrip.departureTime">Departure Time</label>
+              <div class="time-input-group">
+                <input id="trip-departure-hh" class="form-input time-input-hh" type="text"
+                  placeholder="07" maxlength="2" autocomplete="off" />
+                <span class="time-colon">:</span>
+                <input id="trip-departure-mm" class="form-input time-input-mm" type="text"
+                  placeholder="00" maxlength="2" autocomplete="off" />
+                <div class="ampm-toggle" id="trip-departure-ampm">
+                  <button type="button" class="ampm-btn active" data-period="AM">AM</button>
+                  <button type="button" class="ampm-btn" data-period="PM">PM</button>
+                </div>
+              </div>
+              <div class="form-hint" data-i18n="newTrip.departureHint">When you plan to leave. Enter the time and select AM or PM.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="trip-start" data-i18n="newTrip.startingLocation">Starting Location (Street Address, City, State, Zip Code)</label>
+              <input id="trip-start" class="form-input" type="text"
+                data-i18n-placeholder="newTrip.startPlaceholder"
+                placeholder="e.g. 9801 International Dr, Orlando, Florida 32819" />
+              <div class="form-hint" data-i18n="newTrip.startHint">Required if provided — must include street address, city, state, and zip code, separated by commas.</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="trip-restaurants" data-i18n="newTrip.restaurantPrefs">Restaurant Preferences</label>
+            <input id="trip-restaurants" class="form-input" type="text"
+              data-i18n-placeholder="newTrip.restaurantPlaceholder"
+              placeholder="e.g. vegetarian, Italian, $$-$$$ range" />
+            <div class="form-hint" data-i18n="newTrip.restaurantHint">Diet, cuisine, or price preferences for meal stops.</div>
+          </div>
+
+          <button id="btn-generate" class="btn btn-primary btn-lg" style="margin-top:var(--space-2);" data-i18n-html="newTrip.generate">
+            &#128640; Generate Itinerary
+          </button>
+        </div>
+
+        <!-- Result area (hidden until plan is generated) -->
+        <div id="result-new-trip" class="hidden" style="margin-top: var(--space-8);"></div>
+      </section>
+
+      <!-- Page: My Plans -->
+      <section id="page-my-plans" class="page hidden">
+        <div class="page-header">
+          <h2 data-i18n="myPlans.title">My Plans</h2>
+          <p data-i18n="myPlans.subtitle">Previously generated itineraries stored in this session.</p>
+        </div>
+        <div id="plans-list"></div>
+        <div id="plans-empty" class="empty-state hidden">
+          <div class="empty-state-icon">&#128203;</div>
+          <div class="empty-state-title" data-i18n="myPlans.emptyTitle">No saved plans</div>
+          <div class="empty-state-text" data-i18n="myPlans.emptyText">Generate your first itinerary from the New Trip page and it will appear here.</div>
+        </div>
+      </section>
+
+      <!-- Page: Plan Detail -->
+      <section id="page-plan-detail" class="page hidden">
+        <div class="page-header">
+          <button class="btn btn-sm btn-ghost mb-2" id="btn-back-plans">&#8592; <span data-i18n="myPlans.title">Back to Plans</span></button>
+          <h2 id="plan-detail-title" data-i18n="topbar.itinerary">Itinerary</h2>
+          <p id="plan-detail-subtitle"></p>
+        </div>
+        <div id="plan-detail-content"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Modal Container (rendered dynamically) -->
+  <div id="modal-container"></div>
+
+  <!-- =======================================================================
+       Application JavaScript
+       ======================================================================= -->
+  <script src="/js/i18n.js"></script>
+  <script src="/js/app.js"></script>
+
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
