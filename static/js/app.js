@@ -18,6 +18,60 @@
   var getCurrentLang = window.getCurrentLanguage || function () { return "en"; };
   const API_BASE = window.location.origin;
   const PLANS_KEY = "plan-it_plans";
+  const THEME_KEY = "Plan-It:theme";
+
+  /* ------------------------------------------------------------------------
+     Theme Management (dark / light)
+     ------------------------------------------------------------------------ */
+  function getTheme() {
+    try {
+      var stored = localStorage.getItem(THEME_KEY);
+      if (stored === "dark" || stored === "light") return stored;
+    } catch (e) {}
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  function applyTheme(theme) {
+    var html = document.documentElement;
+    var isDark = theme === "dark";
+    if (isDark) {
+      html.classList.add("dark");
+    } else {
+      html.classList.remove("dark");
+    }
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+    updateThemeToggleUI(isDark);
+  }
+
+  function toggleTheme() {
+    var isDark = document.documentElement.classList.contains("dark");
+    applyTheme(isDark ? "light" : "dark");
+  }
+
+  function updateThemeToggleUI(isDark) {
+    var icon = document.getElementById("theme-toggle-icon");
+    var label = document.getElementById("theme-toggle-label");
+    var topbarIcon = document.getElementById("theme-toggle-icon-topbar");
+    if (icon) icon.textContent = isDark ? "☀️" : "🌙";
+    if (label) label.textContent = isDark ? "Light" : "Dark";
+    if (topbarIcon) topbarIcon.textContent = isDark ? "☀️" : "🌙";
+  }
+
+  function initTheme() {
+    applyTheme(getTheme());
+    var btn = document.getElementById("theme-toggle");
+    var topbarBtn = document.getElementById("theme-toggle-topbar");
+    if (btn) btn.addEventListener("click", toggleTheme);
+    if (topbarBtn) topbarBtn.addEventListener("click", toggleTheme);
+    // Listen for system preference changes
+    try {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
+        // Only auto-switch if user hasn't set a preference
+        try { if (localStorage.getItem(THEME_KEY)) return; } catch (_) {}
+        applyTheme(e.matches ? "dark" : "light");
+      });
+    } catch (e) {}
+  }
 
   /* ------------------------------------------------------------------------
      DOM Refs (lazy-initialized after DOMContentLoaded)
@@ -59,6 +113,7 @@
      ------------------------------------------------------------------------ */
   function init() {
     cacheDom();
+    initTheme();
     loadPlanStore();
     loadFiredReminders();
     bindEvents();

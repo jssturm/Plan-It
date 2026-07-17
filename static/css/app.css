@@ -81,6 +81,97 @@
 }
 
 /* --------------------------------------------------------------------------
+   Dark Theme
+   -------------------------------------------------------------------------- */
+html.dark {
+  --color-bg-primary: #0f1117;
+  --color-bg-secondary: #16181d;
+  --color-bg-card: #1a1d24;
+  --color-bg-card-hover: #22252d;
+  --color-bg-input: #1a1d24;
+  --color-bg-chip: #22252d;
+
+  --color-border: #2d3139;
+  --color-border-focus: #6b78f7;
+  --color-border-subtle: #252830;
+
+  --color-text-primary: #e8eaed;
+  --color-text-secondary: #9aa0a8;
+  --color-text-muted: #6b7280;
+  --color-text-inverse: #0f1117;
+
+  --color-accent: #6b78f7;
+  --color-accent-hover: #8994f9;
+  --color-accent-muted: rgba(107, 120, 247, 0.15);
+
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #60a5fa;
+
+  --color-priority-high: #ef4444;
+  --color-priority-medium: #f59e0b;
+  --color-priority-low: #60a5fa;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 16px rgba(107, 120, 247, 0.15);
+
+  color-scheme: dark;
+}
+
+/* Dark theme overrides for components with hardcoded colors */
+html.dark .home-btn {
+  color: #e2e8f0;
+  border-color: #334155;
+  background: #1e293b;
+}
+html.dark .home-btn:hover {
+  background: #1e3a5f;
+  border-color: #38bdf8;
+  color: #7dd3fc;
+}
+
+html.dark .alert-item {
+  background: #422006;
+  border-color: #78350f;
+  color: #fde68a;
+}
+html.dark .strategy-item {
+  background: #172554;
+  border-color: #1e3a5f;
+  color: #93c5fd;
+}
+
+html.dark .badge-walk { background: rgba(96, 165, 250, 0.15); color: #93c5fd; }
+html.dark .badge-walk-map { background: rgba(107, 120, 247, 0.15); color: #a5b4fc; }
+html.dark .badge-walk-map:hover { background: rgba(107, 120, 247, 0.25); }
+html.dark .badge-reminder { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+html.dark .badge-wait { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+html.dark .badge-restaurant { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+html.dark .badge-backup { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+html.dark .badge-priority.high { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+html.dark .badge-priority.medium { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+html.dark .badge-priority.low { background: rgba(96, 165, 250, 0.12); color: #93c5fd; }
+
+html.dark .toast-success { background: #064e3b; color: #6ee7b7; border-color: #059669; }
+html.dark .toast-error { background: #7f1d1d; color: #fca5a5; border-color: #b91c1c; }
+html.dark .toast-info { background: #1e3a5f; color: #93c5fd; border-color: #2563eb; }
+
+html.dark .ea-tooltip {
+  background: #334155;
+  color: #f1f5f9;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.08);
+}
+html.dark .ea-tooltip::after { border-top-color: #334155; }
+html.dark .ea-tooltip.flip::after {
+  border-top-color: transparent;
+  border-bottom-color: #334155;
+}
+
+html.dark .bug-report-fab { background: #1e293b; border-color: #334155; }
+
+/* --------------------------------------------------------------------------
    Reset & Base
    -------------------------------------------------------------------------- */
 *,
@@ -326,6 +417,43 @@ ul, ol {
   border-color: var(--color-text-muted);
 }
 
+/* Theme toggle in sidebar */
+.sidebar-theme {
+  margin-bottom: var(--space-3);
+}
+
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.theme-toggle-btn:hover {
+  border-color: var(--color-text-muted);
+  background: var(--color-bg-chip);
+}
+.theme-toggle-btn:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-muted);
+}
+.theme-toggle-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.theme-toggle-label {
+  font-weight: 500;
+}
+
 .health-indicator {
   display: flex;
   align-items: center;
@@ -385,6 +513,27 @@ ul, ol {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* Theme toggle in topbar (always visible on mobile + desktop) */
+.theme-toggle-topbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.theme-toggle-topbar:hover {
+  border-color: var(--color-text-muted);
+  background: var(--color-bg-card-hover);
 }
 
 /* Page container */

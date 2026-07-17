@@ -8,6 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <!-- Anti-flash: apply dark class before first paint to prevent light flash -->
+  <script>
+    (function(){try{var t=localStorage.getItem('Plan-It:theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark');}catch(e){}})();
+  </script>
   <link rel="stylesheet" href="/css/app.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%235b6ef5'/><text x='50%25' y='55%25' text-anchor='middle' dy='.1em' fill='white' font-family='system-ui' font-weight='700' font-size='18'>J</text></svg>" />
 </head>
@@ -71,6 +75,13 @@
             <option value="es">Español</option>
           </select>
         </div>
+        <div class="sidebar-theme">
+          <label class="sidebar-lang-label">🎨 Theme</label>
+          <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="theme-toggle-icon" id="theme-toggle-icon">🌙</span>
+            <span class="theme-toggle-label" id="theme-toggle-label">Dark</span>
+          </button>
+        </div>
         <div class="health-indicator">
           <span id="health-dot" class="health-dot"></span>
           <span id="health-label" data-i18n="health.checking">API checking...</span>
@@ -87,6 +98,9 @@
         </button>
         <span class="topbar-title" id="topbar-title" data-i18n="topbar.newTrip">New Trip</span>
         <div class="topbar-actions">
+          <button class="btn btn-sm btn-icon theme-toggle-topbar" id="theme-toggle-topbar" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span id="theme-toggle-icon-topbar">🌙</span>
+          </button>
           <button class="btn btn-sm btn-secondary" id="btn-clear-store" data-i18n-title="confirm.clearTitle" title="Clear all saved plans" data-i18n-html="topbar.clearAll">&#128465; Clear All</button>
         </div>
       </header>
