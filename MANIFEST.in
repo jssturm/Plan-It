@@ -3,8 +3,16 @@ include LICENSE
 include requirements.txt
 include .env.example
 include pyproject.toml
+include .pylintrc
 include install.sh
 include install.ps1
+include tunnel.sh
+include tunnel-elevated.sh
+include tunnel-ngrok.sh
+include vercel.json
+include SHORTCUT_SETUP.md
+include test_travel.py
+include test_deepseek.py
 
 recursive-include app *.py
 recursive-include static *.html

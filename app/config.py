@@ -30,6 +30,13 @@ class Settings:
     # Prompt sanitization: maximum input length to accept
     MAX_INPUT_LENGTH: int = int(os.getenv("MAX_INPUT_LENGTH", "2000"))
 
+    # Search backend selection — "ddg", "searxng", or "auto" (default: auto)
+    # "auto" tries DuckDuckGo first, falls back to SearxNG on failure.
+    SEARCH_BACKEND: str = os.getenv("SEARCH_BACKEND", "auto")
+
+    # SearxNG public or self-hosted instance URL (used when backend is searxng or auto-failover)
+    SEARXNG_INSTANCE: str = os.getenv("SEARXNG_INSTANCE", "https://searx.be")
+
 
 @lru_cache
 def get_settings() -> Settings:

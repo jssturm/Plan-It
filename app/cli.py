@@ -105,6 +105,10 @@ def _bootstrap_dotenv(env: Environment) -> Path:
             "TRAVEL_API_KEY=\n"
             "RATE_LIMIT=10/minute\n"
             "CORS_ORIGINS=*\n"
+            "# Search: ddg (DuckDuckGo), searxng (SearxNG), or auto (DDG first, failover to SearxNG)\n"
+            "SEARCH_BACKEND=auto\n"
+            "# SearxNG instance URL (public or self-hosted)\n"
+            "SEARXNG_INSTANCE=https://searx.be\n"
             "SEARCH_MAX_RESULTS=12\n"
             "SEARCH_RATE_LIMIT_S=1.2\n"
             "MAX_INPUT_LENGTH=2000\n"
@@ -172,7 +176,7 @@ def _start_cloudflare_tunnel(port: int) -> subprocess.Popen | None:  # type: ign
     """
     import subprocess
     try:
-        proc = subprocess.Popen(
+        proc = subprocess.Popen(  # pylint: disable=consider-using-with
             ["cloudflared", "tunnel", "--url", f"http://127.0.0.1:{port}"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -337,7 +341,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     ]:
         try:
             req = urllib.request.Request(url, method="HEAD")
-            urllib.request.urlopen(req, timeout=5)
+            with urllib.request.urlopen(req, timeout=5):
+                pass
             print(f"  ✓ {label} — reachable")
         except Exception:
             print(f"  ✗ {label} — unreachable")

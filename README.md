@@ -79,7 +79,7 @@ Under the hood, it uses DuckDuckGo for real-time web research, a deterministic r
 | Request logging middleware | Every request logged with method, path, remote address, and response status |
 | Apple Shortcut bridge | `/start-day` endpoint returns flat dict format for iOS Shortcuts compatibility |
 | Cloudflare Tunnel wrapper | `tunnel.sh` auto-reconnect script for exposing the server publicly |
-| DeepSeek AI integration (optional) | Set `DEEPSEEK_API_KEY` to enable enhanced planning via `deepseek-chat`, `deepseek-reasoner`, or `deepseek-coder` models |
+| DeepSeek AI integration (optional) | Set `DEEPSEEK_API_KEY` to enable enhanced planning via `deepseek-v4-flash`, `deepseek-reasoner`, or `deepseek-coder` models |
 | Multi-agent framework | `app/agents/` — extensible agent system for specialized planning tasks |
 | SQLite tourism knowledge base | `app/engine/db.py` — multi-state venue/attraction/POI lookups from a SQLite database |
 | Health endpoint | `GET /health` returns `{"status": "ok"}` for liveness probing |
@@ -324,12 +324,14 @@ Override with the `TRAVEL_ENV_PATH` environment variable.
 |----------|---------|-------------|
 | `TRAVEL_API_KEY` | *(empty — no auth)* | If set, endpoints require `Authorization: Bearer <key>` |
 | `DEEPSEEK_API_KEY` | *(empty — disabled)* | If set, enables DeepSeek AI for enhanced itinerary planning |
-| `DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek model to use: `deepseek-chat`, `deepseek-reasoner`, or `deepseek-coder` |
+| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | DeepSeek model to use: `deepseek-v4-flash`, `deepseek-reasoner`, or `deepseek-coder` |
 | `JEFFOS_DB_PATH` | *(auto-detected)* | Path to SQLite tourism database (defaults to project root `test.db`) |
 | `RATE_LIMIT` | `10/minute` | Per-IP rate limit |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
-| `SEARCH_MAX_RESULTS` | `12` | Max DuckDuckGo results per query |
-| `SEARCH_RATE_LIMIT_S` | `1.2` | Seconds between DuckDuckGo queries |
+| `SEARCH_BACKEND` | `auto` | Search backend: `ddg` (DuckDuckGo), `searxng` (SearxNG), or `auto` (DDG first, failover to SearxNG) |
+| `SEARXNG_INSTANCE` | `https://searx.be` | SearxNG instance URL (public or self-hosted) |
+| `SEARCH_MAX_RESULTS` | `12` | Max results per query |
+| `SEARCH_RATE_LIMIT_S` | `1.2` | Seconds between search queries |
 | `MAX_INPUT_LENGTH` | `2000` | Maximum user input length |
 | `ENVIRONMENT` | `production` | Logging context |
 | `TRAVEL_HOST` | `0.0.0.0` | Server bind address |
@@ -447,7 +449,7 @@ Provides real-world drive time estimates between common city pairs using a compr
 
 ### DeepSeek AI Integration (`app/llm/`)
 
-When `DEEPSEEK_API_KEY` is set, the planner leverages DeepSeek models for enhanced itinerary generation. Supports all three DeepSeek models: `deepseek-chat` (V3), `deepseek-reasoner` (R1 with chain-of-thought), and `deepseek-coder` (structured output).
+When `DEEPSEEK_API_KEY` is set, the planner leverages DeepSeek models for enhanced itinerary generation. Supports all three DeepSeek models: `deepseek-v4-flash` (V3), `deepseek-reasoner` (R1 with chain-of-thought), and `deepseek-coder` (structured output).
 
 ### Multi-Agent System (`app/agents/`)
 

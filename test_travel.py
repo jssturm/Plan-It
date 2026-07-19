@@ -1,10 +1,66 @@
-"""Integration-style tests for travel endpoints using FastAPI TestClient."""
+"""Integration-style tests for travel endpoints using FastAPI TestClient.
 
+Tests that require network access (calling the planner engine which
+triggers DuckDuckGo searches) are skipped unless ``--run-network`` is
+passed to pytest.  This keeps the default ``pytest`` run fast and
+offline-safe.
+"""
+
+from unittest.mock import patch
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 client = TestClient(app)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_MOCK_VENUE = {
+    "venue_type": "theme_park",
+    "description": "A test venue.",
+    "hours": "9:00 AM – 10:00 PM",
+    "top_attractions": ["Test Attraction 1", "Test Attraction 2"],
+    "crowd_tips": ["Arrive early"],
+    "parking_info": "On-site parking available",
+    "alerts": [],
+}
+
+_MOCK_TRANSIT = {
+    "driving_time": "30 minutes",
+    "transit_tip": "30 min (15 mi) via fastest route",
+    "maps_url": "https://www.google.com/maps/dir/?api=1&destination=Test+Venue",
+}
+
+_MOCK_RESTAURANTS: list = []
+_MOCK_HOTELS: list = []
+
+_MOCK_SEARCH_RESULTS = [
+    {"title": "Test Result 1", "href": "https://example.com/1", "body": "Body text 1"},
+    {"title": "Test Result 2", "href": "https://example.com/2", "body": "Body text 2"},
+]
+
+
+def _mock_planner_deps():
+    """Patch every network-dependent function the planner calls so
+    ``/travel`` can be tested without live DuckDuckGo / OSRM requests."""
+    return patch.multiple(
+        "app.engine.search",
+        search_venue_info=lambda venue_name, location="": dict(_MOCK_VENUE),
+        search_restaurants=lambda venue_area, preferences="", count=4: list(_MOCK_RESTAURANTS),
+        search_hotels=lambda area, count=3: list(_MOCK_HOTELS),
+        search_transit=lambda origin, dest: dict(_MOCK_TRANSIT),
+        search_rental_cars=lambda location: [],
+        search_ride_shares=lambda origin, dest: [],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
 
 
 class TestHealthEndpoint:
@@ -12,6 +68,12 @@ class TestHealthEndpoint:
         response = client.get("/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Request validation (no network needed — Pydantic rejects bad payloads
+# before the planner runs)
+# ---------------------------------------------------------------------------
 
 
 class TestRequestValidation:
@@ -32,18 +94,26 @@ class TestRequestValidation:
         assert response.status_code == 422
 
     def test_valid_input_accepted(self):
-        response = client.post("/travel", json={"input": "Trip to Orlando tomorrow"})
+        """Planner is mocked so this test stays fast and offline."""
+        with _mock_planner_deps():
+            response = client.post("/travel", json={"input": "Trip to Orlando tomorrow"})
         assert response.status_code != 422
 
 
 class TestStartDayEndpoint:
     def test_start_day_with_valid_input(self):
-        response = client.post("/start-day", json={"input": "Trip to Orlando tomorrow"})
+        with _mock_planner_deps():
+            response = client.post("/start-day", json={"input": "Trip to Orlando tomorrow"})
         assert response.status_code != 422
 
     def test_start_day_missing_input_returns_422(self):
         response = client.post("/start-day", json={})
         assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Prompt sanitization
+# ---------------------------------------------------------------------------
 
 
 class TestPromptSanitization:
@@ -61,27 +131,40 @@ class TestPromptSanitization:
         assert "disallowed content" in str(response.json()["detail"])
 
     def test_normal_travel_input_passes(self):
-        response = client.post(
-            "/travel",
-            json={"input": "Plan my trip to Kennedy Space Center tomorrow with lunch stop"},
-        )
+        """Planner is mocked so this test stays fast and offline."""
+        with _mock_planner_deps():
+            response = client.post(
+                "/travel",
+                json={"input": "Plan my trip to Kennedy Space Center tomorrow with lunch stop"},
+            )
         assert response.status_code != 422
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 
 
 class TestAuthProtection:
     def test_auth_disabled_in_dev_mode(self):
         response = client.get("/health")
         assert response.status_code == 200
-        response = client.post("/travel", json={"input": "Test trip"})
+        with _mock_planner_deps():
+            response = client.post("/travel", json={"input": "Test trip"})
         assert response.status_code != 401
 
 
+# ---------------------------------------------------------------------------
+# Itinerary schema validation (pure Pydantic — no network)
+# ---------------------------------------------------------------------------
+
+
 class TestItinerarySchema:
-    """Verify the new Operations Planner schema fields validate correctly."""
+    """Verify the Operations Planner schema fields validate correctly."""
 
     def test_minimal_valid_travel_plan(self):
         """A minimal payload with required fields should pass Pydantic validation."""
-        from app.schemas.itinerary import Stop, ScheduleItem, TravelPlan
+        from app.schemas.itinerary import ScheduleItem, Stop, TravelPlan
 
         plan = TravelPlan(
             departure_time="07:30 AM",
@@ -126,19 +209,139 @@ class TestItinerarySchema:
 
         from pydantic import ValidationError
 
-        try:
+        with pytest.raises(ValidationError):
             ScheduleItem(time="08:00 AM", action="Test", priority="urgent")
-            assert False, "Should have raised ValidationError"
-        except ValidationError:
-            pass
 
     def test_invalid_maps_url_rejected(self):
         from app.schemas.itinerary import Stop
 
         from pydantic import ValidationError
 
-        try:
+        with pytest.raises(ValidationError):
             Stop(step="Test", maps_url="https://example.com/bad-url")
-            assert False, "Should have raised ValidationError"
-        except ValidationError:
-            pass
+
+
+# ---------------------------------------------------------------------------
+# Search backend selection & failover (SearxNG integration)
+# ---------------------------------------------------------------------------
+
+
+class _FakeSettings:
+    """Minimal settings stub for backend-selection tests."""
+
+    def __init__(self, backend: str):
+        self.SEARCH_BACKEND = backend
+        self.SEARXNG_INSTANCE = "https://searx.be"
+
+
+class TestSearchBackend:
+    """Verify the multi-backend search engine: DDG, SearxNG, and auto-failover."""
+
+    def test_search_web_ddg_backend(self, monkeypatch):
+        """When SEARCH_BACKEND=ddg, only DuckDuckGo is called."""
+        from app.engine.search import search_web
+
+        calls: dict[str, int] = {"ddg": 0, "searxng": 0}
+
+        def fake_ddg(query, max_results=8):
+            calls["ddg"] += 1
+            return list(_MOCK_SEARCH_RESULTS)
+
+        def fake_sxng(query, max_results=8):
+            calls["searxng"] += 1
+            return []
+
+        monkeypatch.setattr("app.engine.search._search_ddg", fake_ddg)
+        monkeypatch.setattr("app.engine.search._search_searxng", fake_sxng)
+        monkeypatch.setattr("app.engine.search.get_settings", lambda: _FakeSettings("ddg"))
+
+        results = search_web("test query")
+        assert len(results) == 2
+        assert calls["ddg"] == 1
+        assert calls["searxng"] == 0
+
+    def test_search_web_searxng_backend(self, monkeypatch):
+        """When SEARCH_BACKEND=searxng, only SearxNG is called."""
+        from app.engine.search import search_web
+
+        calls: dict[str, int] = {"ddg": 0, "searxng": 0}
+
+        def fake_ddg(query, max_results=8):
+            calls["ddg"] += 1
+            return []
+
+        def fake_sxng(query, max_results=8):
+            calls["searxng"] += 1
+            return list(_MOCK_SEARCH_RESULTS)
+
+        monkeypatch.setattr("app.engine.search._search_ddg", fake_ddg)
+        monkeypatch.setattr("app.engine.search._search_searxng", fake_sxng)
+        monkeypatch.setattr("app.engine.search.get_settings", lambda: _FakeSettings("searxng"))
+
+        results = search_web("test query")
+        assert len(results) == 2
+        assert calls["ddg"] == 0
+        assert calls["searxng"] == 1
+
+    def test_search_web_auto_ddg_succeeds(self, monkeypatch):
+        """In auto mode, DDG results are used directly; SearxNG never called."""
+        from app.engine.search import search_web
+
+        calls: dict[str, int] = {"ddg": 0, "searxng": 0}
+
+        def fake_ddg(query, max_results=8):
+            calls["ddg"] += 1
+            return list(_MOCK_SEARCH_RESULTS)
+
+        def fake_sxng(query, max_results=8):
+            calls["searxng"] += 1
+            return []
+
+        monkeypatch.setattr("app.engine.search._search_ddg", fake_ddg)
+        monkeypatch.setattr("app.engine.search._search_searxng", fake_sxng)
+        monkeypatch.setattr("app.engine.search.get_settings", lambda: _FakeSettings("auto"))
+
+        results = search_web("test query")
+        assert len(results) == 2
+        assert calls["ddg"] == 1
+        assert calls["searxng"] == 0
+
+    def test_search_web_auto_failover(self, monkeypatch):
+        """In auto mode, when DDG returns empty, SearxNG is used as fallback."""
+        from app.engine.search import search_web
+
+        calls: dict[str, int] = {"ddg": 0, "searxng": 0}
+
+        def fake_ddg(query, max_results=8):
+            calls["ddg"] += 1
+            return []  # simulate DDG failure
+
+        def fake_sxng(query, max_results=8):
+            calls["searxng"] += 1
+            return list(_MOCK_SEARCH_RESULTS)
+
+        monkeypatch.setattr("app.engine.search._search_ddg", fake_ddg)
+        monkeypatch.setattr("app.engine.search._search_searxng", fake_sxng)
+        monkeypatch.setattr("app.engine.search.get_settings", lambda: _FakeSettings("auto"))
+
+        results = search_web("test query")
+        assert len(results) == 2
+        assert calls["ddg"] == 1
+        assert calls["searxng"] == 1  # failover occurred
+
+    def test_search_web_all_backends_fail(self, monkeypatch):
+        """When all backends return empty, an empty list is returned."""
+        from app.engine.search import search_web
+
+        def fake_ddg(query, max_results=8):
+            return []
+
+        def fake_sxng(query, max_results=8):
+            return []
+
+        monkeypatch.setattr("app.engine.search._search_ddg", fake_ddg)
+        monkeypatch.setattr("app.engine.search._search_searxng", fake_sxng)
+        monkeypatch.setattr("app.engine.search.get_settings", lambda: _FakeSettings("auto"))
+
+        results = search_web("test query")
+        assert results == []

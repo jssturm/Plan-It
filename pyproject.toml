@@ -49,9 +49,6 @@ Issues      = "https://github.com/jssturm/Plan-It/issues"
 [project.scripts]
 plan-it = "app.cli:main"
 
-[project.gui-scripts]
-plan-it-gui = "app.cli:main"
-
 [tool.setuptools.packages.find]
 include = ["app", "app.*"]
 

@@ -1,8 +1,25 @@
 """Pydantic request models for API endpoints."""
 
+import re
 from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+# Patterns that indicate prompt injection or system-instruction override attempts.
+# These are rejected at the API boundary before any processing occurs.
+_PROMPT_INJECTION_PATTERNS: list[re.Pattern] = [
+    re.compile(r"\[system\]", re.IGNORECASE),
+    re.compile(r"ignore\s+all\s+(previous\s+)?instructions", re.IGNORECASE),
+    re.compile(r"you\s+are\s+(now|a\s+different)\s+(an?\s+)?\w+", re.IGNORECASE),
+    re.compile(r"disregard\s+(all\s+)?(previous\s+)?instructions", re.IGNORECASE),
+    re.compile(r"override\s+(all\s+)?(system\s+)?(prompts?|instructions?)", re.IGNORECASE),
+    re.compile(r"<\|.*\|>", re.IGNORECASE),  # LLM special token delimiters
+]
+
+
+def _contains_injection(text: str) -> bool:
+    """Return True if *text* matches any known prompt-injection pattern."""
+    return any(pat.search(text) for pat in _PROMPT_INJECTION_PATTERNS)
 
 
 class TravelRequest(BaseModel):
@@ -54,4 +71,9 @@ class TravelRequest(BaseModel):
             self.departure_time = self.departure_time.strip()
         if not self.input:
             raise ValueError("input must not be empty or whitespace-only")
+        # Reject prompt-injection / system-override attempts before any
+        # processing. This protects the planner from malicious input that
+        # tries to override system instructions.
+        if _contains_injection(self.input):
+            raise ValueError("input contains disallowed content")
         return self

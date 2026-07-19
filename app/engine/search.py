@@ -1,26 +1,39 @@
-"""DuckDuckGo-powered search engine — zero API keys, zero authentication.
+"""Multi-backend search engine — zero API keys required.
 
 Performs web research for venues, restaurants, transit, hotels, and
-alerts using DuckDuckGo's instant answer and text search APIs via the
-``ddgs`` package. All queries are rate-limited to respect the free tier.
+alerts.  Primary backends:
+
+* **DuckDuckGo** (via ``ddgs``) — default, no API key, rate-limited at ~1 QPS
+* **SearxNG** (via public or self-hosted instance) — privacy-respecting
+  metasearch engine, JSON API, no API key
+
+Both backends are free and require zero authentication.  The active
+backend is controlled by the ``SEARCH_BACKEND`` env var (``ddg``,
+``searxng``, or ``auto``); ``auto`` tries DuckDuckGo first and
+fails over to SearxNG on error or empty results.
 
 Dependencies:
-    ddgs>=9.0    (MIT licensed, no API key)
+    ddgs>=9.0    (MIT licensed, no API key — DuckDuckGo backend)
+    urllib       (stdlib — SearxNG backend)
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import time
+import urllib.parse
+import urllib.request
 from functools import lru_cache
 from typing import Any
 
+from app.config import get_settings
 from app.engine import db
 
 logger = logging.getLogger("plan-it.search")
 
 # ---------------------------------------------------------------------------
-# Rate limiting — DuckDuckGo asks for ~1 QPS for fair use.
+# Rate limiting — shared across backends for fair use.
 # ---------------------------------------------------------------------------
 _MIN_INTERVAL_S = 1.2  # seconds between queries
 _last_query: float = 0.0
@@ -36,7 +49,7 @@ def _rate_wait() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Lazy import — ddgs is heavy, only load when needed.
+# Backend: DuckDuckGo (lazy import — ddgs is heavy)
 # ---------------------------------------------------------------------------
 _ddgs: Any = None
 
@@ -50,30 +63,106 @@ def _ddg() -> Any:
     return _ddgs
 
 
+def _search_ddg(query: str, max_results: int = 8) -> list[dict[str, str]]:
+    """Run a DuckDuckGo text search via the ``ddgs`` library.
+
+    Returns a list of dicts with keys ``title``, ``href``, ``body``.
+    Returns an empty list on failure (never raises).
+    """
+    _rate_wait()
+    try:
+        results = list(_ddg().text(query, max_results=max_results))
+        logger.info("ddg search: %r → %d results", query[:80], len(results))
+        return results
+    except Exception as exc:
+        logger.warning("DuckDuckGo search failed for %r: %s", query[:80], exc)
+        return []
+
+
 # ---------------------------------------------------------------------------
-# Public API
+# Backend: SearxNG (public or self-hosted instance, JSON API)
+# ---------------------------------------------------------------------------
+
+_SEARXNG_CATEGORIES = "general,news"  # SearxNG category filter for web results
+
+
+def _search_searxng(query: str, max_results: int = 8) -> list[dict[str, str]]:
+    """Run a search against a SearxNG instance.
+
+    Uses the public ``https://searx.be`` instance by default, overridable
+    via the ``SEARXNG_INSTANCE`` environment variable.
+
+    Returns a list of dicts with keys ``title``, ``href``, ``body``.
+    Returns an empty list on failure (never raises).
+    """
+    settings = get_settings()
+    instance = settings.SEARXNG_INSTANCE.rstrip("/")
+    params = urllib.parse.urlencode({
+        "q": query,
+        "format": "json",
+        "categories": _SEARXNG_CATEGORIES,
+        "pageno": 1,
+    })
+    url = f"{instance}/search?{params}"
+
+    _rate_wait()
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as exc:
+        logger.warning("SearxNG search failed for %r: %s", query[:80], exc)
+        return []
+
+    results: list[dict[str, str]] = []
+    for entry in data.get("results", [])[:max_results]:
+        results.append({
+            "title": entry.get("title", ""),
+            "href": entry.get("url", ""),
+            "body": entry.get("content", ""),
+        })
+
+    logger.info("searxng search: %r → %d results", query[:80], len(results))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Public API — unified search with configurable backend + failover
 # ---------------------------------------------------------------------------
 
 def search_web(query: str, max_results: int = 8) -> list[dict[str, str]]:
-    """Run a DuckDuckGo text search and return a list of result dicts.
+    """Run a web search and return a list of result dicts.
 
-    Each dict has keys: 'title', 'href', 'body'.
+    Each dict has keys: ``title``, ``href``, ``body``.
+
+    The active backend is determined by the ``SEARCH_BACKEND`` env var:
+    - ``ddg`` — DuckDuckGo only
+    - ``searxng`` — SearxNG only
+    - ``auto`` (default) — DDG first, fails over to SearxNG on error/empty
 
     Args:
         query: The search query string.
         max_results: Maximum number of results to return.
 
     Returns:
-        List of dicts, empty list on failure.
+        List of dicts, empty list if all backends fail.
     """
-    _rate_wait()
-    try:
-        results = list(_ddg().text(query, max_results=max_results))
-        logger.info("search: %r → %d results", query[:80], len(results))
+    settings = get_settings()
+    backend = settings.SEARCH_BACKEND.lower()
+
+    if backend == "searxng":
+        return _search_searxng(query, max_results)
+
+    if backend == "ddg":
+        return _search_ddg(query, max_results)
+
+    # "auto" — try DDG first, fall back to SearxNG
+    results = _search_ddg(query, max_results)
+    if results:
         return results
-    except Exception as exc:
-        logger.warning("DuckDuckGo search failed for %r: %s", query[:80], exc)
-        return []
+
+    logger.info("DDG returned 0 results — failing over to SearxNG for %r", query[:80])
+    return _search_searxng(query, max_results)
 
 
 @lru_cache(maxsize=200)
@@ -293,30 +382,18 @@ def search_transit(origin: str, destination: str) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # US state name ↔ code mapping (supports both "FL" and "Florida")
 # ---------------------------------------------------------------------------
-_US_STATE_NAMES: dict[str, str] = {
-    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
-    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
-    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
-    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
-    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
-    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
-    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
-    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
-    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
-    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
-    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
-    "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
-    "wisconsin": "WI", "wyoming": "WY",
-    # District / territories commonly appearing in US addresses
-    "district of columbia": "DC", "washington dc": "DC", "dc": "DC",
-    "puerto rico": "PR", "guam": "GU", "us virgin islands": "VI",
-}
+from app.engine.states import (  # noqa: E402  — shared source of truth
+    CODE_TO_NAME,
+    STATE_PATTERN_2LETTER,
+    US_STATE_NAMES,
+    resolve_state_code,
+)
 
-# Reverse mapping: 2-letter code → full name
-_CODE_TO_NAME: dict[str, str] = {code: name.title() for name, code in _US_STATE_NAMES.items()}
-
-# Regex that matches any US state abbreviation (2 letters) or full state name
-_STATE_PATTERN_2LETTER = r'\b(A[LKZR]|C[AOT]|D[EC]|F[LM]|G[AU]|HI|I[DLNA]|K[SY]|LA|M[ADEHINOPST]|N[CDEHJMVY]|O[HKR]|P[AWR]|RI|S[CD]|T[NX]|UT|V[AIT]|W[AIVY])\b'
+# Backward-compatible aliases for internal use
+_US_STATE_NAMES = US_STATE_NAMES
+_CODE_TO_NAME = CODE_TO_NAME
+_STATE_PATTERN_2LETTER = STATE_PATTERN_2LETTER
+_resolve_state_code = resolve_state_code
 
 
 def _extract_state(text: str) -> tuple[str, str]:
@@ -337,45 +414,24 @@ def _extract_state(text: str) -> tuple[str, str]:
             best_code = code
 
     if best_code:
-        # Remove the first occurrence of the matched state name from the text
-        pattern_parts = []
         for full_name, code in _US_STATE_NAMES.items():
             if code == best_code and len(full_name) == best_len:
-                pattern_parts.append(r'\b' + re.escape(full_name) + r'\b')
-                break
-        if pattern_parts:
-            remainder = re.sub(pattern_parts[0], '', text, count=1, flags=re.IGNORECASE)
-            return (best_code, remainder.strip())
+                remainder = re.sub(
+                    r'\b' + re.escape(full_name) + r'\b', '', text, count=1, flags=re.IGNORECASE,
+                )
+                return (best_code, remainder.strip())
+        return (best_code, text)
 
     # 2. Fall back to 2-letter abbreviation
     state_match = re.search(_STATE_PATTERN_2LETTER, text)
     if state_match:
         code = state_match.group(1).upper()
-        remainder = re.sub(r'\b' + state_match.group(1) + r'\b', '', text, count=1, flags=re.IGNORECASE)
+        remainder = re.sub(
+            r'\b' + state_match.group(1) + r'\b', '', text, count=1, flags=re.IGNORECASE,
+        )
         return (code, remainder.strip())
 
     return ("", text)
-
-
-def _resolve_state_code(user_input: str) -> str:
-    """Convert a state identifier (code or full name) to a 2-letter code.
-
-    Returns the 2-letter code or the original input uppercased if no match.
-    Used by db.py functions that query by state code.
-    """
-    import re
-    if not user_input:
-        return ""
-    upper = user_input.strip().upper()
-    # Already a 2-letter code
-    if len(upper) == 2 and re.fullmatch(_STATE_PATTERN_2LETTER, upper):
-        return upper
-    # Try full name match
-    lower = user_input.strip().lower()
-    for name, code in _US_STATE_NAMES.items():
-        if lower == name:
-            return code
-    return upper
 
 
 def _geocode_census(addr: str) -> tuple[float, float] | None:

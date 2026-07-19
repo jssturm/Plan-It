@@ -21,48 +21,7 @@ logger = logging.getLogger("plan-it.db")
 # ---------------------------------------------------------------------------
 # State code normalization — supports both "FL" and "Florida"
 # ---------------------------------------------------------------------------
-_US_STATE_NAMES: dict[str, str] = {
-    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
-    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
-    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
-    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
-    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
-    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
-    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
-    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
-    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
-    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
-    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
-    "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
-    "wisconsin": "WI", "wyoming": "WY",
-    "district of columbia": "DC", "washington dc": "DC", "dc": "DC",
-    "puerto rico": "PR", "guam": "GU", "us virgin islands": "VI",
-}
-
-
-def _resolve_state_code(raw: str) -> str:
-    """Convert a state identifier (2-letter code or full name) to a 2-letter code.
-
-    Returns the uppercased input if no match — but always at least handles
-    the common case of "Florida" → "FL".
-    """
-    if not raw:
-        return ""
-    stripped = raw.strip()
-    upper = stripped.upper()
-    # Already a 2-letter code
-    if len(upper) == 2:
-        return upper
-    # Try full name match
-    lower = stripped.lower()
-    code = _US_STATE_NAMES.get(lower)
-    if code:
-        return code
-    # Partial fallback: check if lowercase input is a known name substring
-    for name, code_val in _US_STATE_NAMES.items():
-        if lower in name or name in lower:
-            return code_val
-    return upper
+from app.engine.states import resolve_state_code as _resolve_state_code  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Database path resolution
@@ -81,11 +40,11 @@ def _resolve_db_path() -> str:
         _DB_PATH = env_path
         return _DB_PATH
 
-    # Project root: jeffos/../test.db (development directory)
+    # Project root: check common locations relative to the app package
     candidates = [
-        Path(__file__).resolve().parent.parent.parent.parent / "test.db",  # jeffos/app/engine/db.py → up 4 levels
-        Path(__file__).resolve().parent.parent.parent / "data" / "test.db",  # jeffos/data/test.db
-        Path("/home/jstur/development/test.db"),
+        Path(__file__).resolve().parent.parent.parent.parent / "test.db",  # repo root (app/engine/db.py → up 4)
+        Path(__file__).resolve().parent.parent.parent / "data" / "test.db",  # repo/data/test.db
+        Path(__file__).resolve().parent.parent / "data" / "test.db",  # project/data/test.db (Plan-It layout)
     ]
     for candidate in candidates:
         if candidate.is_file():

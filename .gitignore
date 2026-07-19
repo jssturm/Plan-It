@@ -23,3 +23,7 @@ Thumbs.db
 dist/
 *.egg-info/
 .vercel
+.env
+.env.*
+!.env.example
+pyarmor.bug.log
