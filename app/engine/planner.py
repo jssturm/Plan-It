@@ -681,7 +681,7 @@ def _build_route(
             else:
                 meal_label = "Dinner"
 
-            maps_query = _maps_search_location(midpoint, destination)
+            maps_query = _maps_search_location(midpoint, destination, origin)
             route.append({
                 "step": f"{meal_label} stop ~{hours_in}h in near {midpoint} — {meal_label.lower()}, stretch your legs, ~30 min",
                 "maps_url": f'https://www.google.com/maps/search/restaurants+near+{maps_query}',
@@ -689,7 +689,7 @@ def _build_route(
         # If no 4h stops were added but it's over 1h, inject a midpoint break
         if stop_counter == 0 and drive_min > 60:
             midpoint = _infer_midpoint(origin, destination)
-            maps_query = _maps_search_location(midpoint, destination)
+            maps_query = _maps_search_location(midpoint, destination, origin)
             route.append({
                 "step": f"Breakfast stop en route near {midpoint} — stretch, coffee, and a quick bite, ~20 min",
                 "maps_url": f'https://www.google.com/maps/search/breakfast+near+{maps_query}',
@@ -742,18 +742,119 @@ def _infer_midpoint(origin: str, destination: str) -> str:
     return "the halfway point"
 
 
-def _maps_search_location(midpoint: str, fallback_destination: str) -> str:
+def _maps_search_location(midpoint: str, fallback_destination: str, origin: str = "") -> str:
     """Return a URL-encoded location string for Google Maps URLs.
 
-    When the midpoint heuristic returns 'the halfway point' (unknown),
-    falls back to the destination so Google Maps opens a meaningful
-    location instead of the user's current position.
+    When the midpoint heuristic returns 'the halfway point' (unknown):
+
+    1. If *origin* is provided, computes the actual geographic midpoint
+       between origin and destination via Nominatim geocoding.
+    2. Otherwise, falls back to *fallback_destination* so Google Maps
+       opens a meaningful location instead of the user's current position.
 
     Uses ``urllib.parse.quote`` for proper encoding of special characters
     (commas, ampersands, etc.) that ``.replace(' ', '+')`` would miss.
     """
-    location = fallback_destination if midpoint == "the halfway point" else midpoint
-    return urllib.parse.quote(location, safe="")
+    if midpoint != "the halfway point":
+        return urllib.parse.quote(midpoint, safe="")
+
+    # Try geographic midpoint computation when origin is available
+    if origin:
+        geo_mid = _geographic_midpoint(origin, fallback_destination)
+        if geo_mid:
+            return urllib.parse.quote(geo_mid, safe="")
+
+    # Last resort: fall back to destination
+    return urllib.parse.quote(fallback_destination, safe="")
+
+
+def _geographic_midpoint(origin: str, destination: str) -> str | None:
+    """Compute the geographic midpoint between two location names.
+
+    Uses Nominatim to geocode both locations, calculates the midpoint
+    lat/lon, then reverse-geocodes to find the nearest city/town name.
+
+    Returns a city/region name string, or None if geocoding fails.
+    """
+    import json
+    import time
+    import urllib.request
+
+    # ── Geocode origin ─────────────────────────────────────────────────
+    time.sleep(1.2)  # Nominatim rate limit: 1 req/s
+    origin_coords = _geocode_nominatim(origin)
+    if not origin_coords:
+        logger.info("Geographic midpoint: could not geocode origin %r", origin[:60])
+        return None
+
+    # ── Geocode destination ────────────────────────────────────────────
+    time.sleep(1.2)
+    dest_coords = _geocode_nominatim(destination)
+    if not dest_coords:
+        logger.info("Geographic midpoint: could not geocode destination %r", destination[:60])
+        return None
+
+    # ── Compute midpoint ───────────────────────────────────────────────
+    mid_lat = (origin_coords[0] + dest_coords[0]) / 2.0
+    mid_lon = (origin_coords[1] + dest_coords[1]) / 2.0
+
+    # ── Reverse geocode the midpoint to a city name ────────────────────
+    time.sleep(1.2)
+    params = urllib.parse.urlencode({
+        "lat": str(mid_lat),
+        "lon": str(mid_lon),
+        "format": "json",
+        "zoom": 10,  # City/town level
+    })
+    url = f"https://nominatim.openstreetmap.org/reverse?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as exc:
+        logger.warning("Reverse geocode failed for (%.4f, %.4f): %s", mid_lat, mid_lon, exc)
+        return None
+
+    # Extract city, town, or county name from the Nominatim response
+    address = data.get("address", {})
+    city = (
+        address.get("city")
+        or address.get("town")
+        or address.get("village")
+        or address.get("county")
+        or address.get("state")
+        or ""
+    )
+    if city:
+        logger.info(
+            "Geographic midpoint: %s → %s → (%s) = %.4f,%.4f",
+            origin[:40], destination[:40], city, mid_lat, mid_lon,
+        )
+        return city
+
+    logger.info("Geographic midpoint: no city found at (%.4f, %.4f)", mid_lat, mid_lon)
+    return None
+
+
+def _geocode_nominatim(addr: str) -> tuple[float, float] | None:
+    """Geocode a location name to (lat, lon) using Nominatim.
+
+    Free, global coverage, 1 req/s rate limit.  Returns None on failure.
+    """
+    import json
+    import urllib.request
+
+    params = urllib.parse.urlencode({"q": addr, "format": "json", "limit": 1})
+    url = f"https://nominatim.openstreetmap.org/search?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            if data:
+                return (float(data[0]["lat"]), float(data[0]["lon"]))
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1040,7 +1141,7 @@ def _build_schedule(
             "restaurant": "Restaurant recommendation TBD",
             "meal_timing_note": f"Midpoint of {dest_name} → {origin} — good time to take a break",
             "reminder_min": None,
-            "walking_map_url": f'https://www.google.com/maps/search/restaurants+near+{_maps_search_location(midpoint, dest_name)}',
+            "walking_map_url": f'https://www.google.com/maps/search/restaurants+near+{_maps_search_location(midpoint, dest_name, origin)}',
             "backup_plan": f"Grab fast food or pack snacks for the road if pressed for time",
         })
 
