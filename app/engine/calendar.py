@@ -12,6 +12,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+from icalendar import Alarm, Calendar, Event
+
 logger = logging.getLogger("plan-it.calendar")
 
 # ---------------------------------------------------------------------------
@@ -21,6 +23,9 @@ logger = logging.getLogger("plan-it.calendar")
 def generate_icalendar(plan: dict, plan_id: str = "") -> str:
     """Build an RFC 5545 iCalendar string from a Plan-It travel plan.
 
+    Uses the ``icalendar`` library for standards-compliant output with
+    proper timezone handling, recurrence, and alarm support.
+
     Args:
         plan: The full plan dict (must have ``schedule`` and ``route`` keys).
         plan_id: Optional plan identifier used as the calendar UID suffix.
@@ -28,26 +33,29 @@ def generate_icalendar(plan: dict, plan_id: str = "") -> str:
     Returns:
         A complete iCalendar string (``text/calendar`` MIME type).
     """
-    lines: list[str] = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//Plan-It//Travel Itinerary//EN",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
-        "X-WR-CALNAME:Plan-It Travel Itinerary",
-    ]
+    cal = Calendar()
+    cal.add("prodid", "-//Plan-It//Travel Itinerary//EN")
+    cal.add("version", "2.0")
+    cal.add("calscale", "GREGORIAN")
+    cal.add("method", "PUBLISH")
+    cal.add("x-wr-calname", "Plan-It Travel Itinerary")
 
     venue = plan.get("venue_type", "Trip")
     schedule = plan.get("schedule", [])
     route = plan.get("route", [])
 
     if not schedule:
-        lines.append("END:VCALENDAR")
-        return "\r\n".join(lines) + "\r\n"
+        return cal.to_ical().decode("utf-8")
 
-    # Use today's date as the event date since plans don't carry explicit dates.
-    # The departure_time field provides the time-of-day context.
-    event_date = _pick_event_date(plan)
+    # Use the trip_date if available, otherwise pick a sensible default
+    trip_date_str = plan.get("trip_date", "")
+    if trip_date_str:
+        try:
+            event_date = datetime.fromisoformat(trip_date_str)
+        except (ValueError, TypeError):
+            event_date = _pick_event_date(plan)
+    else:
+        event_date = _pick_event_date(plan)
 
     for idx, item in enumerate(schedule):
         time_str = item.get("time", "").strip()
@@ -55,60 +63,46 @@ def generate_icalendar(plan: dict, plan_id: str = "") -> str:
         if start_dt is None:
             continue
 
-        # Estimate duration: walking + wait time as a rough proxy, minimum 30 min
         walk = item.get("walking_time_min") or 0
         wait = item.get("wait_time_min") or 0
         duration_min = max(walk + wait + 10, 30)
         end_dt = start_dt + timedelta(minutes=duration_min)
 
         uid = f"planit-{plan_id[:8] if plan_id else 'trip'}-{idx}@plan-it.app"
-        summary = _sanitize(item.get("action", "Plan-It stop"))
-        description_parts = [item.get("action", "")]
+
+        event = Event()
+        event.add("uid", uid)
+        event.add("dtstart", start_dt)
+        event.add("dtend", end_dt)
+        event.add("summary", item.get("action", "Plan-It stop"))
+
+        desc_parts = [item.get("action", "")]
         if item.get("restaurant"):
-            description_parts.append(f"Restaurant: {item['restaurant']}")
+            desc_parts.append(f"Restaurant: {item['restaurant']}")
         if item.get("meal_timing_note"):
-            description_parts.append(f"Tip: {item['meal_timing_note']}")
+            desc_parts.append(f"Tip: {item['meal_timing_note']}")
         if item.get("backup_plan"):
-            description_parts.append(f"Backup: {item['backup_plan']}")
-        description = _sanitize("\\n\\n".join(description_parts))
+            desc_parts.append(f"Backup: {item['backup_plan']}")
+        event.add("description", "\n\n".join(desc_parts))
 
-        location = ""
-        if item.get("walking_map_url"):
-            location = item["walking_map_url"]
-        elif route and len(route) > 0:
-            location = route[0].get("maps_url", "")
-
-        lines += [
-            "BEGIN:VEVENT",
-            f"UID:{uid}",
-            f"DTSTART:{start_dt.strftime('%Y%m%dT%H%M%S')}",
-            f"DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}",
-            f"SUMMARY:{summary}",
-            f"DESCRIPTION:{description}",
-        ]
+        location = item.get("walking_map_url") or (route[0].get("maps_url", "") if route else "")
         if location:
-            lines.append(f"LOCATION:{_sanitize(location)}")
+            event.add("location", location)
 
-        # Priority: high=1, medium=5, low=9 (RFC 5545 scale)
-        prio_map = {"high": "1", "medium": "5", "low": "9"}
-        priority = prio_map.get(item.get("priority", "medium"), "5")
-        lines.append(f"PRIORITY:{priority}")
+        prio_map = {"high": 1, "medium": 5, "low": 9}
+        event.add("priority", prio_map.get(item.get("priority", "medium"), 5))
 
-        # Reminder alarm if set
         reminder_min = item.get("reminder_min")
         if reminder_min and isinstance(reminder_min, (int, float)) and reminder_min > 0:
-            lines += [
-                "BEGIN:VALARM",
-                f"TRIGGER:-PT{int(reminder_min)}M",
-                "ACTION:DISPLAY",
-                f"DESCRIPTION:Reminder: {summary}",
-                "END:VALARM",
-            ]
+            alarm = Alarm()
+            alarm.add("action", "DISPLAY")
+            alarm.add("trigger", timedelta(minutes=-int(reminder_min)))
+            alarm.add("description", f"Reminder: {item.get('action', 'Plan-It stop')}")
+            event.add_component(alarm)
 
-        lines.append("END:VEVENT")
+        cal.add_component(event)
 
-    lines.append("END:VCALENDAR")
-    return "\r\n".join(lines) + "\r\n"
+    return cal.to_ical().decode("utf-8")
 
 
 # ---------------------------------------------------------------------------

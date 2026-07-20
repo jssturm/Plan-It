@@ -235,6 +235,13 @@ def search_venue_info(venue_name: str, location: str = "") -> dict[str, Any]:
         if "park" in body.lower():
             parking = body[:200]
 
+    # 8. Venue image — DuckDuckGo image search (free, already have ddgs)
+    images: list[str] = []
+    try:
+        images = _search_venue_images(venue_name)
+    except Exception:
+        pass
+
     return {
         "venue_type": venue_type,
         "description": description,
@@ -243,6 +250,7 @@ def search_venue_info(venue_name: str, location: str = "") -> dict[str, Any]:
         "crowd_tips": crowd_tips if crowd_tips else ["Arrive 30 minutes before opening"],
         "parking_info": parking,
         "alerts": [],
+        "images": images[:4],
     }
 
 
@@ -1410,3 +1418,55 @@ def _parse_minutes_raw(duration_str: str) -> int:
     if m_match:
         total += int(m_match.group(1))
     return total
+
+
+def _search_venue_images(venue_name: str, count: int = 4) -> list[str]:
+    """Search DuckDuckGo Images for venue photos.
+
+    Uses the ``ddgs`` library (already installed).  Returns a list of
+    image URLs (empty list on failure).
+    """
+    try:
+        results = list(_ddg().images(venue_name, max_results=count))
+        urls = [r.get("image", "") for r in results if r.get("image")]
+        logger.info("ddg images: %r → %d results", venue_name[:60], len(urls))
+        return urls[:count]
+    except Exception as exc:
+        logger.warning("Image search failed for %r: %s", venue_name[:60], exc)
+        return []
+
+
+def _scrape_venue_details(url: str) -> dict[str, str]:
+    """Scrape venue details from a webpage using BeautifulSoup.
+
+    Extracts operating hours, ticket prices, and description text.
+    Returns empty dict on failure — never raises.
+    """
+    try:
+        from bs4 import BeautifulSoup
+
+        req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+    except Exception:
+        return {}
+
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        text_parts = []
+        for tag in soup.find_all(["p", "li", "h2", "h3"]):
+            txt = tag.get_text(strip=True)
+            if len(txt) > 20:
+                text_parts.append(txt)
+        description = " ".join(text_parts[:5])[:500]
+
+        hours = ""
+        for tag in soup.find_all(string=lambda t: t and ("AM" in t or "PM" in t or "hour" in t.lower())):
+            txt = tag.strip()
+            if 5 < len(txt) < 200:
+                hours = txt
+                break
+
+        return {"description": description, "hours": hours}
+    except Exception:
+        return {}

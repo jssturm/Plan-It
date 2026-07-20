@@ -10,8 +10,12 @@ from __future__ import annotations
 import logging
 import random
 import re
+from datetime import date
 
-from app.engine import crowd, search, weather
+from dateutil.parser import parse as parse_date
+from dateutil.parser import ParserError
+
+from app.engine import crowd, currency, search, weather
 from app.llm import deepseek_client
 
 logger = logging.getLogger("plan-it.planner")
@@ -41,6 +45,9 @@ def build_travel_plan(
     """
     # 1. Parse the user's intent — LLM-first with regex fallback
     intent = _parse_intent_llm(user_input)
+
+    # 1a. Extract date from user input ("tomorrow", "next Saturday", etc.)
+    trip_date = _extract_date_from_input(user_input)
 
     # Merge inferred starting location from free-text ("from X")
     # with the explicit API field, preferring the explicit one.
@@ -151,18 +158,37 @@ def build_travel_plan(
         hotel_area = intent.get("location") or intent["venue"]
         hotels = search.search_hotels(hotel_area, count=3)
 
-    # Flights for long trips
+    # Flights for long / undriveable trips.
+    # Triggered when ANY of these are true:
+    #   1. One-way drive > 6 hours (most people fly for 6h+ drives)
+    #   2. User mentions flying/ferry/boat/train ("fly to", "flight", "ferry", etc.)
+    #   3. No drive-time estimate available (likely international / cross-continent)
     total_drive_h = _estimate_total_drive(route)
+    user_wants_flight = _user_mentioned_flying(user_input)
+    needs_flight = (
+        (total_drive_h > 6 and starting_location)
+        or user_wants_flight
+        or (total_drive_h == 0 and starting_location and _route_looks_undriveable(route))
+    )
+
     flights: list[dict] = []
     rental_cars: list[dict] = []
     ride_shares: list[dict] = []
     parking_options: list[dict] = []
-    if total_drive_h > 12 and starting_location:
+    if needs_flight:
         dest_location = intent.get("location") or intent["venue"]
-        flights = _default_flights(starting_location, dest_location)
+        origin = starting_location or "your location"
+        flights = _default_flights(origin, dest_location)
         rental_cars = search.search_rental_cars(dest_location)
-        ride_shares = search.search_ride_shares(starting_location, dest_location)
-        parking_options = _default_parking(starting_location)
+        ride_shares = search.search_ride_shares(origin, dest_location)
+        if starting_location:
+            parking_options = _default_parking(starting_location)
+
+        # International travel tips — when origin/destination look like different countries
+        if _looks_international(origin, dest_location):
+            strategy.append("🛂 International travel: ensure passports are valid for 6+ months beyond your return date")
+            strategy.append("💱 Check exchange rates and notify your bank of travel dates")
+            alerts.append("✈ International flight — arrive at the airport 3 hours before departure")
 
     plan = {
         "venue_type": venue.get("venue_type", "general"),
@@ -176,6 +202,7 @@ def build_travel_plan(
         "parking_options": parking_options,
         "flights": flights,
         "hotels": hotels,
+        "trip_date": trip_date.isoformat() if trip_date else "",
         "crowd_level": crowd_level,
         "total_walking_min": total_walking or None,
         "total_wait_min": total_wait or None,
@@ -501,6 +528,40 @@ def _match_location_suffix(known_key: str, remainder: str) -> str | None:
     return None
 
 
+def _extract_date_from_input(user_input: str) -> date | None:
+    """Parse date references like 'tomorrow', 'next Saturday', 'July 4th'.
+
+    Uses python-dateutil for fuzzy parsing.  Returns a date object or None.
+    """
+    text_lower = user_input.lower().strip()
+
+    # Handle relative dates that dateutil struggles with
+    today = date.today()
+    relative_map = {
+        "tomorrow": today.replace(day=today.day + 1) if today.day < 28 else today,
+        "today": today,
+        "next week": today.replace(day=today.day + 7) if today.day < 22 else today,
+        "this weekend": today,  # approximate
+    }
+    # More precise relative handling
+    if "tomorrow" in text_lower:
+        from datetime import timedelta
+        return today + timedelta(days=1)
+    if "day after tomorrow" in text_lower:
+        from datetime import timedelta
+        return today + timedelta(days=2)
+
+    # Try dateutil for "next Saturday", "July 4th", "2024-12-25", etc.
+    try:
+        parsed = parse_date(user_input, fuzzy=True, default= today)
+        if parsed:
+            return parsed.date()
+    except (ParserError, ValueError, OverflowError):
+        pass
+
+    return None
+
+
 def _strip_address_noise(text: str) -> str:
     """Remove noise prefixes from extracted addresses like 'my house', 'home', etc."""
     noise_prefixes = [
@@ -700,7 +761,64 @@ def _estimate_total_drive(route: list[dict]) -> float:
     return total_min / 60.0
 
 
-# ---------------------------------------------------------------------------
+def _user_mentioned_flying(user_input: str) -> bool:
+    """Detect if the user mentioned air travel, ferries, boats, or trains."""
+    text_lower = user_input.lower()
+    transit_keywords = [
+        "fly ", "flight", "flying", "airport", "plane", "airline",
+        "ferry", "boat ", "cruise", "sail", "water taxi",
+        "train", "amtrak", "rail", "subway", "metro",
+    ]
+    return any(kw in text_lower for kw in transit_keywords)
+
+
+def _route_looks_undriveable(route: list[dict]) -> bool:
+    """Return True if the route text suggests an undriveable distance.
+
+    Looks for phrases like 'too far to drive', international mentions,
+    or missing numeric drive-time estimates (which implies the route
+    couldn't be calculated — common for cross-continent trips).
+    """
+    combined = " ".join(leg.get("step", "") for leg in route).lower()
+    undriveable_signals = [
+        "too far", "overseas", "international", "fly ",
+        "head to", "get directions",  # generic placeholder when routing fails
+    ]
+    # If the route has no numeric time AND no miles mentioned, it's a
+    # placeholder — likely undriveable.
+    has_time = bool(re.search(r'\d+\s*(hour|min)', combined))
+    has_miles = bool(re.search(r'\d+\s*mi', combined))
+    if not has_time and not has_miles:
+        return True
+    return any(signal in combined for signal in undriveable_signals)
+
+
+# Known international city/country names that indicate cross-border travel
+_INTERNATIONAL_SIGNALS = {
+    "brazil", "mexico", "canada", "france", "uk", "england", "germany",
+    "japan", "china", "australia", "italy", "spain", "portugal", "india",
+    "south korea", "singapore", "dubai", "uae", "netherlands", "switzerland",
+    "saõ paulo", "rio", "buenos aires", "santiago", "bogota", "lima",
+    "london", "paris", "tokyo", "berlin", "rome", "madrid", "sydney",
+    "toronto", "vancouver", "montreal", "amsterdam", "brussels",
+    "copenhagen", "stockholm", "oslo", "helsinki", "dublin",
+    "Lisbon", "barcelona", "milan", "venice", "prague", "vienna",
+    "budapest", "warsaw", "athens", "istanbul", "moscow",
+    "seoul", "bangkok", "hanoi", "kuala lumpur", "jakarta",
+    "mumbai", "delhi", "cairo", "cape town", "nairobi",
+    "auckland", "wellington",
+}
+
+
+def _looks_international(origin: str, destination: str) -> bool:
+    """Return True if origin/destination suggest international travel.
+
+    Checks for known non-US city/country names in either location.
+    This is a heuristic — not authoritative — but catches the common
+    case of cross-border trips that need passport/currency tips.
+    """
+    combined = f"{origin} {destination}".lower()
+    return any(signal in combined for signal in _INTERNATIONAL_SIGNALS)
 # Schedule construction
 # ---------------------------------------------------------------------------
 
