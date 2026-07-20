@@ -1330,15 +1330,23 @@ def _parse_time(time_str: str) -> tuple[int, int]:
 
 
 def _fmt_time(hour: int, minute: int) -> str:
-    if hour >= 24:
-        hour -= 24
+    """Format a 24-hour hour and minute as a 12-hour clock string.
+
+    Handles overflow beyond 24 hours by appending a `` +N`` day-offset
+    suffix (e.g. ``02:48 AM +1`` for hour=26).  Previously, the function
+    only subtracted 24 once, so hours ≥ 48 (e.g. a two-day drive with
+    rest stops) produced invalid times like ``14:48 PM``.
+    """
+    day_offset = hour // 24
+    hour = hour % 24
     meridiem = "AM"
     if hour >= 12:
         meridiem = "PM"
     display_h = hour if hour <= 12 else hour - 12
     if display_h == 0:
         display_h = 12
-    return f"{display_h:02d}:{minute:02d} {meridiem}"
+    suffix = f" +{day_offset}" if day_offset > 0 else ""
+    return f"{display_h:02d}:{minute:02d} {meridiem}{suffix}"
 
 
 # ---------------------------------------------------------------------------
