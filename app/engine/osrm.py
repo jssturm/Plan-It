@@ -95,17 +95,23 @@ def extract_city(text: str) -> str | None:
     """Extract a known city name from a free-text origin string.
 
     Returns the lowercase city slug, or None if no known city is found.
+
+    Normalizes away periods so ``"St. Petersburg"`` matches the
+    ``"st petersburg"`` slug (the period would otherwise prevent
+    a substring match).
     """
-    text_lower = text.lower()
+    # Strip periods so "St. Petersburg" → "st petersburg" can match
+    text_lower = text.lower().replace(".", "")
     # Sort by length descending so longer matches win (e.g. "west palm beach" before "palm")
     for slug, display in sorted(_CITY_NAMES, key=lambda x: -len(x[0])):
-        if slug in text_lower:
+        slug_clean = slug.replace(".", "")
+        if slug_clean in text_lower:
             # Check it's a whole-word match (avoid matching "orlando" inside "orlandos")
             # by checking word boundaries around the match position
-            idx = text_lower.find(slug)
+            idx = text_lower.find(slug_clean)
             if idx >= 0:
                 before_ok = idx == 0 or not text_lower[idx - 1].isalpha()
-                after_ok = idx + len(slug) >= len(text_lower) or not text_lower[idx + len(slug)].isalpha()
+                after_ok = idx + len(slug_clean) >= len(text_lower) or not text_lower[idx + len(slug_clean)].isalpha()
                 if before_ok and after_ok:
                     return slug.split()[0]  # Return just the primary city name
     return None
@@ -166,6 +172,10 @@ _DRIVE_TIMES: dict[tuple[str, str], str] = {
     ("st petersburg", "tampa"): "25 minutes",
     ("orlando", "st petersburg"): "1 hour 30 minutes",
     ("st petersburg", "orlando"): "1 hour 30 minutes",
+    ("jacksonville", "st petersburg"): "3 hours 15 minutes",
+    ("st petersburg", "jacksonville"): "3 hours 15 minutes",
+    ("miami", "st petersburg"): "4 hours 15 minutes",
+    ("st petersburg", "miami"): "4 hours 15 minutes",
     ("orlando", "melbourne"): "1 hour 15 minutes",
     ("melbourne", "orlando"): "1 hour 15 minutes",
     ("miami", "naples"): "2 hours",
@@ -342,8 +352,8 @@ def lookup_drive_time(origin: str, destination: str) -> str | None:
 
     Returns a human-readable drive time string, or None if no match.
     """
-    origin_lower = origin.lower()
-    dest_lower = destination.lower()
+    origin_lower = origin.lower().replace(".", "")
+    dest_lower = destination.lower().replace(".", "")
 
     # Try extracting city names from full addresses
     origin_city = extract_city(origin)
@@ -371,8 +381,9 @@ def lookup_drive_time(origin: str, destination: str) -> str | None:
         dest_candidates.add(dest_city)
 
     # Also try the raw input as a slug (works for "Jacksonville", "Tampa", etc.)
-    origin_raw = origin_lower.split(",")[0].strip()
-    dest_raw = dest_lower.split(",")[0].strip()
+    # Strip periods so "St. Petersburg" matches "st petersburg" in the table.
+    origin_raw = origin_lower.split(",")[0].strip().replace(".", "")
+    dest_raw = dest_lower.split(",")[0].strip().replace(".", "")
     origin_candidates.add(origin_raw)
     dest_candidates.add(dest_raw.lower())
 
