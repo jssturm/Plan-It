@@ -503,6 +503,7 @@
           </div>
         </div>
 
+        ${renderCrowdBadge(plan)}
         ${renderStatsGrid(plan)}
         ${renderSchedule(plan)}
         ${renderRoute(plan)}
@@ -519,6 +520,9 @@
           <button class="btn btn-primary" id="btn-view-full" data-plan-id="${escapeHtml(plan.plan_id)}">
             ${t("schedule.viewFull")}
           </button>
+          <a class="btn btn-secondary" href="/travel/${escapeHtml(plan.plan_id)}/calendar" download="${'plan-it-' + escapeHtml(plan.plan_id.slice(0, 8)) + '.ics'}">
+            &#128197; ${t("schedule.downloadCalendar")}
+          </a>
           <button class="btn btn-secondary" id="btn-new-plan">
             ${t("schedule.planAnother")}
           </button>
@@ -572,6 +576,7 @@
     `;
 
     $planDetailContent.innerHTML = `
+      ${renderCrowdBadge(plan)}
       ${renderStatsGrid(plan)}
       ${renderSchedule(plan, true)}
       ${renderRoute(plan)}
@@ -585,6 +590,9 @@
       ${renderTotalsBar(plan)}
 
       <div class="flex gap-3" style="margin-top: var(--space-6);">
+        <a class="btn btn-primary btn-sm" href="/travel/${escapeHtml(planId)}/calendar" download="${'plan-it-' + escapeHtml(planId.slice(0, 8)) + '.ics'}">
+          &#128197; ${t("schedule.downloadCalendar")}
+        </a>
         <button class="btn btn-danger btn-sm" id="btn-delete-plan" data-plan-id="${escapeHtml(planId)}">
           ${t("planDetail.delete")}
         </button>
@@ -645,6 +653,20 @@
   /* ------------------------------------------------------------------------
      Render Helpers — Shared Components
      ------------------------------------------------------------------------ */
+  function renderCrowdBadge(plan) {
+    if (plan.crowd_level == null) return "";
+    var level = plan.crowd_level;
+    var label, colorClass;
+    if (level >= 8) { label = t("crowd.packed"); colorClass = "crowd-high"; }
+    else if (level >= 6) { label = t("crowd.busy"); colorClass = "crowd-med"; }
+    else if (level >= 4) { label = t("crowd.moderate"); colorClass = "crowd-low"; }
+    else { label = t("crowd.light"); colorClass = "crowd-low"; }
+    return '<div class="crowd-banner ' + colorClass + '">'
+      + '<span class="crowd-banner-icon">&#128205;</span>'
+      + '<span>' + t("crowd.predictedCrowd", { level: level }) + ' — ' + label + '</span>'
+      + '</div>';
+  }
+
   function renderStatsGrid(plan) {
     const scheduleLen = Array.isArray(plan.schedule) ? plan.schedule.length : 0;
     const highPriority = Array.isArray(plan.schedule)

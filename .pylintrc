@@ -4,7 +4,7 @@
 init-hook='import sys; sys.path.append(".")'
 
 # Exclude data migration scripts and test helper files from linting
-ignore=data,test_deepseek.py,test_travel.py
+ignore=data,test_travel.py
 
 [MESSAGES CONTROL]
 
@@ -22,8 +22,6 @@ disable=
     C0304,  # missing-final-newline
     C0413,  # wrong-import-position
     C0415,  # import-outside-toplevel
-    E0401,  # import-error
-    E0602,  # undefined-variable
     E0611,  # no-name-in-module
     R0914,  # too-many-locals
     W0404,  # reimported

@@ -96,6 +96,7 @@
 
       // Schedule Items
       "schedule.addStop": "\u2795 Add Stop",
+      "schedule.downloadCalendar": "\uD83D\uDCC5 Download Calendar",
       "schedule.viewFull": "\uD83D\uDC41 View Full Detail",
       "schedule.planAnother": "\u2795 Plan Another Trip",
       "schedule.edit": "\u270E",
@@ -132,6 +133,14 @@
       // Route legs
       "route.openMaps": "\uD83D\uDEE3 Open in Google Maps \u2197",
       "route.leg": "Leg",
+
+      // Totals
+      // Crowd prediction
+      "crowd.predictedCrowd": "Predicted crowd: {level}/10",
+      "crowd.packed": "Packed — expect long waits",
+      "crowd.busy": "Busy — plan ahead",
+      "crowd.moderate": "Moderate — good day to visit",
+      "crowd.light": "Light — enjoy short lines",
 
       // Totals
       "totals.walking": "Total Walking:",
@@ -283,6 +292,7 @@
 
       // Schedule Items
       "schedule.addStop": "\u2795 Añadir Parada",
+      "schedule.downloadCalendar": "\uD83D\uDCC5 Descargar Calendario",
       "schedule.viewFull": "\uD83D\uDC41 Ver Detalle Completo",
       "schedule.planAnother": "\u2795 Planificar Otro Viaje",
       "schedule.edit": "\u270E",
@@ -319,6 +329,14 @@
       // Route legs
       "route.openMaps": "\uD83D\uDEE3 Abrir en Google Maps \u2197",
       "route.leg": "Tramo",
+
+      // Totals
+      // Crowd prediction
+      "crowd.predictedCrowd": "Multitud prevista: {level}/10",
+      "crowd.packed": "Lleno — espera largas colas",
+      "crowd.busy": "Ocupado — planifica con antelación",
+      "crowd.moderate": "Moderado — buen día para visitar",
+      "crowd.light": "Ligero — disfruta de colas cortas",
 
       // Totals
       "totals.walking": "Caminata Total:",

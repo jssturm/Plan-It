@@ -404,3 +404,192 @@ def lookup_drive_time(origin: str, destination: str) -> str | None:
                     return drive_str
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Real-world OSRM routing (geocoding + drive-time calculation)
+# ---------------------------------------------------------------------------
+
+def _geocode_census(addr: str) -> tuple[float, float] | None:
+    """Geocode a US address using the Census Bureau's free geocoder.
+
+    Handles structured US addresses (street, city, state, zip) that
+    Nominatim often fails on. No API key, no rate limit.
+
+    Returns (lat, lon) or None.
+    """
+    import json
+    import urllib.request
+    import urllib.parse
+
+    # Parse address components from the input string.
+    parts = [p.strip() for p in addr.split(",")]
+    if len(parts) < 2:
+        return None
+
+    street = parts[0]
+    zip_match = re.search(r'\b(\d{5}(?:-\d{4})?)\b', parts[-1])
+    zip_code = zip_match.group(1) if zip_match else ""
+    has_street_number = bool(re.search(r'\d', parts[0]))
+    if not has_street_number and not zip_code:
+        return None
+    state, _remainder_state = _extract_state(parts[-1])
+    if len(parts) >= 3:
+        city = parts[-2].strip()
+    elif len(parts) == 2 and state:
+        if re.search(r'\d', parts[0]):
+            remainder = re.sub(r'\b\d{5}(?:-\d{4})?\b', '', parts[1])
+            remainder = re.sub(r'\b[A-Za-z]{2}\b', '', remainder)
+            city = remainder.strip().rstrip(",").strip()
+        else:
+            city = parts[0].strip()
+            street = ""
+    else:
+        city = ""
+
+    if not city or not state:
+        return None
+    has_street = bool(re.search(r'\d', street))
+    if has_street and not zip_code:
+        return None
+
+    params = urllib.parse.urlencode({
+        "street": street,
+        "city": city,
+        "state": state,
+        "zip": zip_code,
+        "benchmark": "Public_AR_Current",
+        "format": "json",
+    })
+    url = f"https://geocoding.geo.census.gov/geocoder/locations/address?{params}"
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get("result", {}).get("addressMatches"):
+                coords = data["result"]["addressMatches"][0]["coordinates"]
+                logger.info("Census geocoded: %r → (%f, %f)", addr[:60], coords["y"], coords["x"])
+                return (coords["y"], coords["x"])
+            return None
+    except Exception:
+        return None
+
+
+def _geocode_nominatim(addr: str) -> tuple[float, float] | None:
+    """Geocode an address using Nominatim (OpenStreetMap).
+
+    Global coverage, free, 1 req/s rate limit.
+
+    Returns (lat, lon) or None.
+    """
+    import json
+    import time
+    import urllib.request
+    import urllib.parse
+
+    params = urllib.parse.urlencode({"q": addr, "format": "json", "limit": 1})
+    url = f"https://nominatim.openstreetmap.org/search?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            if data:
+                logger.info("Nominatim geocoded: %r → (%s, %s)", addr[:60], data[0]["lat"], data[0]["lon"])
+                return (float(data[0]["lat"]), float(data[0]["lon"]))
+            return None
+    except Exception as exc:
+        logger.warning("Nominatim failed for %r: %s", addr[:60], exc)
+        return None
+
+
+def _osrm_transit(origin: str, destination: str) -> dict[str, str] | None:
+    """Calculate real-world drive time using OpenStreetMap routing.
+
+    Uses Nominatim (free geocoding) to convert addresses to coordinates,
+    then the OSRM public routing API to calculate actual drive duration
+    on the real road network. No API keys, no rate limits beyond fair use.
+
+    Returns None when geocoding or routing fails.
+    """
+    import urllib.request
+    import urllib.parse
+    import json
+    import time
+
+    # ── Step 1: Geocode both addresses to lat/lon ──────────────────────
+    coords: list[tuple[float, float]] = []
+    for addr in (origin, destination):
+        coord = _geocode_census(addr)
+        if coord:
+            coords.append(coord)
+            continue
+        time.sleep(1.2)  # Nominatim rate limit: 1 req/s
+        coord = _geocode_nominatim(addr)
+        if coord:
+            coords.append(coord)
+            continue
+        logger.warning("All geocoders failed for %r", addr[:60])
+        return None
+
+    lat1, lon1 = coords[0]
+    lat2, lon2 = coords[1]
+
+    # ── Step 2: Real routing via OSRM public API ───────────────────────
+    route_url = f"https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
+    try:
+        req = urllib.request.Request(route_url, headers={"User-Agent": "Plan-It/0.3"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get("code") != "Ok" or not data.get("routes"):
+                logger.warning("OSRM routing failed for (%f,%f)→(%f,%f)", lat1, lon1, lat2, lon2)
+                return None
+            route = data["routes"][0]
+            duration_seconds = route["legs"][0]["duration"]
+            distance_meters = route["legs"][0]["distance"]
+    except Exception as exc:
+        logger.warning("OSRM routing request failed: %s", exc)
+        return None
+
+    # ── Step 3: Format as human-readable drive time ─────────────────────
+    minutes = int(duration_seconds / 60)
+    miles = int(distance_meters / 1609.34)
+
+    if minutes < 60:
+        driving_time = f"{minutes} minutes"
+    else:
+        hours = minutes // 60
+        remaining_mins = minutes % 60
+        if remaining_mins == 0:
+            driving_time = f"{hours} hours"
+        else:
+            driving_time = f"{hours} hours {remaining_mins} minutes"
+
+    maps_url = f"https://www.google.com/maps/dir/?api=1&origin={urllib.parse.quote(origin)}&destination={urllib.parse.quote(destination)}"
+
+    result = {
+        "driving_time": driving_time,
+        "transit_tip": f"{driving_time} ({miles} mi) via fastest route",
+        "maps_url": maps_url,
+    }
+    logger.info("OSRM route: %s → %s: %s (%d mi)", origin[:40], destination[:40], driving_time, miles)
+    return result
+
+
+def _extract_state(text: str) -> tuple[str, str]:
+    """Extract a US state from text, returning (code, remainder_without_state)."""
+    # Minimal state extraction for geocoding — delegates to the full
+    # implementation in search.py when available, otherwise uses a basic
+    # 2-letter code regex.
+    state_match = re.search(
+        r'\b(A[LKZR]|C[AOT]|D[EC]|F[LM]|G[AU]|HI|I[DLNA]|K[SY]|LA'
+        r'|M[ADEHINOPST]|N[CDEHJMVY]|O[HKR]|P[AWR]|RI|S[CD]|T[NX]|UT'
+        r'|V[AIT]|W[AIVY])\b',
+        text,
+    )
+    if state_match:
+        code = state_match.group(1).upper()
+        remainder = re.sub(
+            r'\b' + state_match.group(1) + r'\b', '', text, count=1, flags=re.IGNORECASE,
+        )
+        return (code, remainder.strip())
+    return ("", text)

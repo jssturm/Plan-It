@@ -2042,3 +2042,50 @@ ul, ol {
     display: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Crowd Prediction Banner
+   -------------------------------------------------------------------------- */
+.crowd-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--space-4);
+}
+.crowd-banner-icon {
+  font-size: 1.2rem;
+}
+.crowd-high {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+.dark .crowd-high {
+  background: #3b1111;
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
+.crowd-med {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.dark .crowd-med {
+  background: #2d1f07;
+  color: #fcd34d;
+  border-color: #78350f;
+}
+.crowd-low {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.dark .crowd-low {
+  background: #0a1f12;
+  color: #86efac;
+  border-color: #14532d;
+}

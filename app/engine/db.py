@@ -29,11 +29,15 @@ from app.engine.states import resolve_state_code as _resolve_state_code  # noqa:
 _DB_PATH: str | None = None
 
 
-def _resolve_db_path() -> str:
-    """Find test.db: check JEFFOS_DB_PATH env var, then project root, then development root."""
+def _resolve_db_path() -> str | None:
+    """Find test.db: check JEFFOS_DB_PATH env var, then project root, then development root.
+
+    Returns None when no database file is found (the caller should handle
+    graceful degradation to hardcoded venue data).
+    """
     global _DB_PATH
     if _DB_PATH is not None:
-        return _DB_PATH
+        return _DB_PATH if _DB_PATH else None
 
     env_path = os.environ.get("JEFFOS_DB_PATH")
     if env_path and Path(env_path).is_file():
@@ -51,22 +55,33 @@ def _resolve_db_path() -> str:
             _DB_PATH = str(candidate)
             return _DB_PATH
 
-    raise FileNotFoundError(
-        f"Cannot find test.db. Checked: {[str(c) for c in candidates]}. "
-        "Set JEFFOS_DB_PATH env var to the full path of test.db."
+    logger.warning(
+        "test.db not found. Checked: %s. "
+        "Set JEFFOS_DB_PATH env var to the full path of test.db. "
+        "Database-backed venue lookups will be unavailable; falling back to hardcoded data.",
+        [str(c) for c in candidates],
     )
+    _DB_PATH = ""  # Sentinel to avoid repeated filesystem checks
+    return None
 
 
 # ---------------------------------------------------------------------------
 # Connection management (one shared connection, thread-safe reads)
 # ---------------------------------------------------------------------------
 _conn: sqlite3.Connection | None = None
+_db_unavailable: bool = False
 
 
-def _get_conn() -> sqlite3.Connection:
-    global _conn
+def _get_conn() -> sqlite3.Connection | None:
+    global _conn, _db_unavailable
+    if _db_unavailable:
+        return None
     if _conn is None:
-        _conn = sqlite3.connect(_resolve_db_path())
+        db_path = _resolve_db_path()
+        if db_path is None:
+            _db_unavailable = True
+            return None
+        _conn = sqlite3.connect(db_path)
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.execute("PRAGMA foreign_keys=ON")
@@ -91,6 +106,8 @@ def lookup_venue_attractions(venue_name: str, location: str = "", limit: int = 1
         Returns empty list if venue not found in database.
     """
     conn = _get_conn()
+    if conn is None:
+        return []
     
     # Try exact match first, then LIKE fallback
     queries = [
@@ -139,6 +156,8 @@ def lookup_venue_info(venue_name: str, location: str = "") -> dict[str, Any] | N
         parking_info, plus state and city metadata. None if not found.
     """
     conn = _get_conn()
+    if conn is None:
+        return None
     
     queries = [
         ("""SELECT v.name, v.category AS venue_type, v.description, v.city, v.region,
@@ -190,6 +209,8 @@ def classify_venue_from_db(venue_name: str) -> str | None:
     This can replace the regex-based _classify_venue() when the DB has a match.
     """
     conn = _get_conn()
+    if conn is None:
+        return None
     try:
         cursor = conn.execute(
             "SELECT category FROM venues WHERE name LIKE ? LIMIT 1",
@@ -215,6 +236,8 @@ def get_state_venues(state_code: str) -> list[dict[str, Any]]:
     """
     code = _resolve_state_code(state_code)
     conn = _get_conn()
+    if conn is None:
+        return []
     try:
         cursor = conn.execute("""
             SELECT v.name, v.category, v.city, v.region, v.is_signature,
@@ -237,6 +260,8 @@ def get_state_events(state_code: str, month: int | None = None) -> list[dict[str
     """
     code = _resolve_state_code(state_code)
     conn = _get_conn()
+    if conn is None:
+        return []
     try:
         if month:
             cursor = conn.execute("""
@@ -265,6 +290,8 @@ def get_state_events(state_code: str, month: int | None = None) -> list[dict[str
 def get_all_states() -> list[dict[str, Any]]:
     """Return all top tourism states with summary info."""
     conn = _get_conn()
+    if conn is None:
+        return []
     try:
         cursor = conn.execute("""
             SELECT s.code, s.name, s.tourism_summary, s.tourism_economy_share,
@@ -292,6 +319,8 @@ def get_venues_by_state_and_category(state_code: str, category: str) -> list[dic
     """
     code = _resolve_state_code(state_code)
     conn = _get_conn()
+    if conn is None:
+        return []
     try:
         cursor = conn.execute("""
             SELECT v.name, v.city, v.description, v.is_signature

@@ -29,6 +29,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.engine import db
+from app.engine.osrm import _osrm_transit
 
 logger = logging.getLogger("plan-it.search")
 
@@ -352,6 +353,147 @@ def search_hotels(
     return hotels
 
 
+def search_restaurants_osm(
+    lat: float, lon: float, radius: int = 3000, count: int = 6
+) -> list[dict[str, str]]:
+    """Search for real restaurants near coordinates using OpenStreetMap Overpass API.
+
+    Queries OSM for ``amenity=restaurant`` nodes within *radius* meters
+    of (*lat*, *lon*).  Free, no API key, global coverage.
+
+    Args:
+        lat: Latitude.
+        lon: Longitude.
+        radius: Search radius in meters (default 3 km).
+        count: Max restaurants to return.
+
+    Returns:
+        List of dicts with: name, cuisine, price_range, location, notes.
+        Empty list on failure.
+    """
+    import urllib.request
+    import urllib.parse
+    import json
+    import time
+
+    # Overpass QL: find restaurant nodes within radius
+    overpass_query = f"""
+    [out:json][timeout:10];
+    node["amenity"="restaurant"](around:{radius},{lat},{lon});
+    out body {count + 10};
+    """
+    url = "https://overpass-api.de/api/interpreter"
+    try:
+        data = urllib.parse.urlencode({"data": overpass_query.strip()}).encode()
+        req = urllib.request.Request(url, data=data, headers={"User-Agent": "Plan-It/0.3"})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            result = json.loads(resp.read().decode())
+    except Exception as exc:
+        logger.warning("Overpass API failed for (%.4f, %.4f): %s", lat, lon, exc)
+        return []
+
+    elements = result.get("elements", [])
+    restaurants: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    for el in elements:
+        tags = el.get("tags", {})
+        name = tags.get("name", "")
+        if not name or len(name) < 2 or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+
+        cuisine = tags.get("cuisine", _infer_cuisine_from_tags(tags))
+        price = _infer_price_from_tags(tags)
+        street = tags.get("addr:street", "")
+        city = tags.get("addr:city", "")
+
+        location = f"{street}, {city}".strip(", ")
+
+        restaurants.append({
+            "name": name,
+            "cuisine": cuisine.title() if cuisine else "Various",
+            "price_range": price,
+            "location": location or "Nearby",
+            "notes": _format_osm_notes(tags),
+        })
+
+        if len(restaurants) >= count:
+            break
+
+    logger.info("OSM restaurants near (%.4f, %.4f): %d results", lat, lon, len(restaurants))
+    return restaurants
+
+
+def _geocode_for_osm(area: str) -> tuple[float, float] | None:
+    """Quick geocode for OSM restaurant lookup.  Returns (lat, lon) or None."""
+    import urllib.request
+    import urllib.parse
+    import json
+
+    params = urllib.parse.urlencode({"q": area, "format": "json", "limit": 1})
+    url = f"https://nominatim.openstreetmap.org/search?{params}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            if data:
+                return (float(data[0]["lat"]), float(data[0]["lon"]))
+    except Exception:
+        pass
+    return None
+
+
+def _infer_cuisine_from_tags(tags: dict) -> str:
+    """Extract cuisine type from OSM tags."""
+    cuisine = tags.get("cuisine", "")
+    if cuisine:
+        return cuisine
+    # Try other tag patterns
+    if tags.get("amenity") == "fast_food":
+        return "Fast Food"
+    if tags.get("diet:vegetarian") == "yes":
+        return "Vegetarian"
+    if tags.get("diet:vegan") == "yes":
+        return "Vegan"
+    return "Various"
+
+
+def _infer_price_from_tags(tags: dict) -> str:
+    """Infer price range from OSM tags."""
+    # OSM sometimes has price/price_range tags
+    price = tags.get("price_range", tags.get("price", ""))
+    if price:
+        return price
+    stars = tags.get("stars", "")
+    if stars:
+        try:
+            s = int(stars.split(":")[0] if ":" in stars else stars)
+            if s >= 4:
+                return "$$$"
+            if s >= 2:
+                return "$$"
+        except (ValueError, TypeError):
+            pass
+    return "$$"
+
+
+def _format_osm_notes(tags: dict) -> str:
+    """Build a human-readable notes string from OSM tags."""
+    parts = []
+    if tags.get("outdoor_seating") == "yes":
+        parts.append("Outdoor seating")
+    if tags.get("wheelchair") == "yes":
+        parts.append("Wheelchair accessible")
+    if tags.get("takeaway") == "yes":
+        parts.append("Takeaway available")
+    if tags.get("opening_hours"):
+        parts.append(f"Hours: {tags['opening_hours'][:60]}")
+    if tags.get("phone"):
+        parts.append(f"Phone: {tags['phone']}")
+    return "; ".join(parts) if parts else ""
+
+
 def search_transit(origin: str, destination: str) -> dict[str, str]:
     """Get transit/driving info between two points.
 
@@ -389,11 +531,6 @@ from app.engine.states import (  # noqa: E402  — shared source of truth
     resolve_state_code,
 )
 
-# Backward-compatible aliases for internal use
-_US_STATE_NAMES = US_STATE_NAMES
-_CODE_TO_NAME = CODE_TO_NAME
-_STATE_PATTERN_2LETTER = STATE_PATTERN_2LETTER
-_resolve_state_code = resolve_state_code
 
 
 def _extract_state(text: str) -> tuple[str, str]:
@@ -408,13 +545,13 @@ def _extract_state(text: str) -> tuple[str, str]:
     best_len = 0
     best_code = ""
     text_lower = text.lower()
-    for name, code in sorted(_US_STATE_NAMES.items(), key=lambda x: -len(x[0])):
+    for name, code in sorted(US_STATE_NAMES.items(), key=lambda x: -len(x[0])):
         if name in text_lower and len(name) > best_len:
             best_len = len(name)
             best_code = code
 
     if best_code:
-        for full_name, code in _US_STATE_NAMES.items():
+        for full_name, code in US_STATE_NAMES.items():
             if code == best_code and len(full_name) == best_len:
                 remainder = re.sub(
                     r'\b' + re.escape(full_name) + r'\b', '', text, count=1, flags=re.IGNORECASE,
@@ -432,195 +569,6 @@ def _extract_state(text: str) -> tuple[str, str]:
         return (code, remainder.strip())
 
     return ("", text)
-
-
-def _geocode_census(addr: str) -> tuple[float, float] | None:
-    """Geocode a US address using the Census Bureau's free geocoder.
-
-    Handles structured US addresses (street, city, state, zip) that
-    Nominatim often fails on. No API key, no rate limit.
-
-    Returns (lat, lon) or None.
-    """
-    import re
-    import json
-    import urllib.request
-    import urllib.parse
-
-    # Parse address components from the input string.
-    # Only handles comma-separated US addresses ("123 Main St, City, ST 12345").
-    # Unstructured addresses (no commas) fall through to Nominatim which
-    # handles free-form geocoding natively.
-    parts = [p.strip() for p in addr.split(",")]
-    if len(parts) < 2:
-        return None
-
-    street = parts[0]
-    # Extract zip code from the last part
-    zip_match = re.search(r'\b(\d{5}(?:-\d{4})?)\b', parts[-1])
-    zip_code = zip_match.group(1) if zip_match else ""
-    # Census geocoder requires either a street address or a zip code.
-    # If we have neither, bail early and let Nominatim handle it.
-    has_street_number = bool(re.search(r'\d', parts[0]))
-    if not has_street_number and not zip_code:
-        return None
-    # Extract state — supports both 2-letter codes (FL) and full names (Florida)
-    state, remainder_state = _extract_state(parts[-1])
-    # City is the second-to-last part if we have 3+ parts, stripping zip/state
-    if len(parts) >= 3:
-        city = parts[-2].strip()
-    elif len(parts) == 2 and state:
-        # Two-part address: "City, State" or "City, State Zip"
-        # If parts[0] looks like a street address (contains digits), treat it as street;
-        # otherwise treat it as the city (e.g. "Jacksonville, Florida").
-        if re.search(r'\d', parts[0]):
-            street_part = parts[0]
-            # Derive city from the state-part remainder (after stripping state + zip)
-            remainder = re.sub(r'\b\d{5}(?:-\d{4})?\b', '', parts[1])
-            remainder = re.sub(r'\b[A-Za-z]{2}\b', '', remainder)
-            for full_name in _US_STATE_NAMES:
-                remainder = re.sub(r'\b' + re.escape(full_name) + r'\b', '', remainder, flags=re.IGNORECASE)
-            city = remainder.strip().rstrip(",").strip()
-        else:
-            # No street number — parts[0] is the city
-            city = parts[0].strip()
-            street = ""  # city-level geocoding; Census handles empty street
-    else:
-        city = ""
-
-    # Require at minimum city + state. Street and zip are optional for
-    # city-level geocoding (the Census API handles empty street/zip).
-    if not city or not state:
-        return None
-    has_street = bool(re.search(r'\d', street))
-    if has_street and not zip_code:
-        # Street-level geocoding needs a zip for accuracy
-        return None
-
-    params = urllib.parse.urlencode({
-        "street": street,
-        "city": city,
-        "state": state,
-        "zip": zip_code,
-        "benchmark": "Public_AR_Current",
-        "format": "json",
-    })
-    url = f"https://geocoding.geo.census.gov/geocoder/locations/address?{params}"
-    try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-            if data.get("result", {}).get("addressMatches"):
-                coords = data["result"]["addressMatches"][0]["coordinates"]
-                logger.info("Census geocoded: %r → (%f, %f)", addr[:60], coords["y"], coords["x"])
-                return (coords["y"], coords["x"])
-            return None
-    except Exception:
-        return None
-
-
-def _geocode_nominatim(addr: str) -> tuple[float, float] | None:
-    """Geocode an address using Nominatim (OpenStreetMap).
-
-    Global coverage, free, 1 req/s rate limit.
-
-    Returns (lat, lon) or None.
-    """
-    import json
-    import time
-    import urllib.request
-    import urllib.parse
-
-    params = urllib.parse.urlencode({"q": addr, "format": "json", "limit": 1})
-    url = f"https://nominatim.openstreetmap.org/search?{params}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-            if data:
-                logger.info("Nominatim geocoded: %r → (%s, %s)", addr[:60], data[0]["lat"], data[0]["lon"])
-                return (float(data[0]["lat"]), float(data[0]["lon"]))
-            return None
-    except Exception as exc:
-        logger.warning("Nominatim failed for %r: %s", addr[:60], exc)
-        return None
-
-
-def _osrm_transit(origin: str, destination: str) -> dict[str, str] | None:
-    """Calculate real-world drive time using OpenStreetMap routing.
-
-    Uses Nominatim (free geocoding) to convert addresses to coordinates,
-    then the OSRM public routing API to calculate actual drive duration
-    on the real road network. No API keys, no rate limits beyond fair use.
-
-    Returns None when geocoding or routing fails.
-    """
-    import urllib.request
-    import urllib.parse
-    import json
-    import time
-
-    # ── Step 1: Geocode both addresses to lat/lon ──────────────────────
-    # Uses a two-layer strategy:
-    #   a) US Census geocoder (best for structured US addresses, no rate limit)
-    #   b) Nominatim (global fallback, 1 req/s rate limit)
-    coords: list[tuple[float, float]] = []
-    for addr in (origin, destination):
-        coord = _geocode_census(addr)
-        if coord:
-            coords.append(coord)
-            continue
-        time.sleep(1.2)  # Nominatim rate limit: 1 req/s
-        coord = _geocode_nominatim(addr)
-        if coord:
-            coords.append(coord)
-            continue
-        logger.warning("All geocoders failed for %r", addr[:60])
-        return None
-
-    lat1, lon1 = coords[0]
-    lat2, lon2 = coords[1]
-
-    # ── Step 2: Real routing via OSRM public API ───────────────────────
-    # OSRM uses lon,lat order in the URL
-    route_url = f"https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
-    try:
-        req = urllib.request.Request(route_url, headers={"User-Agent": "Plan-It/0.3"})
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            data = json.loads(resp.read().decode())
-            if data.get("code") != "Ok" or not data.get("routes"):
-                logger.warning("OSRM routing failed for (%f,%f)→(%f,%f)", lat1, lon1, lat2, lon2)
-                return None
-            route = data["routes"][0]
-            duration_seconds = route["legs"][0]["duration"]
-            distance_meters = route["legs"][0]["distance"]
-    except Exception as exc:
-        logger.warning("OSRM routing request failed: %s", exc)
-        return None
-
-    # ── Step 3: Format as human-readable drive time ─────────────────────
-    minutes = int(duration_seconds / 60)
-    miles = int(distance_meters / 1609.34)
-
-    if minutes < 60:
-        driving_time = f"{minutes} minutes"
-    else:
-        hours = minutes // 60
-        remaining_mins = minutes % 60
-        if remaining_mins == 0:
-            driving_time = f"{hours} hours"
-        else:
-            driving_time = f"{hours} hours {remaining_mins} minutes"
-
-    maps_url = f"https://www.google.com/maps/dir/?api=1&origin={urllib.parse.quote(origin)}&destination={urllib.parse.quote(destination)}"
-
-    result = {
-        "driving_time": driving_time,
-        "transit_tip": f"{driving_time} ({miles} mi) via fastest route",
-        "maps_url": maps_url,
-    }
-    logger.info("OSRM route: %s → %s: %s (%d mi)", origin[:40], destination[:40], driving_time, miles)
-    return result
 
 
 def search_rental_cars(location: str) -> list[dict[str, str]]:

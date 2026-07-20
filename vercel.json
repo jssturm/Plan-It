@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pip install -r requirements.txt",
+  "buildCommand": "pip install -r requirements.txt && python data/load_tourism.py",
   "rewrites": [
     { "source": "/health", "destination": "/api/index" },
     { "source": "/travel", "destination": "/api/index" },

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 
-from app.engine import search
+from app.engine import crowd, search, weather
+from app.llm import deepseek_client
 
 logger = logging.getLogger("plan-it.planner")
 
@@ -37,8 +39,8 @@ def build_travel_plan(
     Returns:
         A dict matching the TravelPlan schema (app.schemas.itinerary.TravelPlan).
     """
-    # 1. Parse the user's intent
-    intent = _parse_intent(user_input)
+    # 1. Parse the user's intent — LLM-first with regex fallback
+    intent = _parse_intent_llm(user_input)
 
     # Merge inferred starting location from free-text ("from X")
     # with the explicit API field, preferring the explicit one.
@@ -91,6 +93,23 @@ def build_travel_plan(
 
     # 8. Inject restaurant recommendations into schedule items
     schedule = _inject_restaurants(schedule, restaurants, restaurant_preferences)
+
+    # 8a. Crowd prediction — venue-specific crowd level and tips
+    crowd_level = crowd.get_crowd_level(intent["venue"])
+    crowd_tips = crowd.get_crowd_tips(intent["venue"], crowd_level)
+    if crowd_tips:
+        strategy = list(crowd_tips) + strategy
+
+    # 8b. Weather forecast — free Open-Meteo API
+    weather_ctx = weather.weather_summary_for_plan(
+        intent["venue"], intent.get("location", "")
+    )
+    if weather_ctx:
+        strategy.append(weather_ctx["note"])
+        for alert in weather_ctx.get("alerts", []):
+            alerts.append(alert)
+        for pack in weather_ctx.get("packing", []):
+            strategy.append(f"Pack: {pack}")
 
     # 9. Assemble the full plan
 
@@ -150,17 +169,19 @@ def build_travel_plan(
         "parking_options": parking_options,
         "flights": flights,
         "hotels": hotels,
+        "crowd_level": crowd_level,
         "total_walking_min": total_walking or None,
         "total_wait_min": total_wait or None,
     }
 
     logger.info(
-        "Plan built: %s, %d route legs, %d schedule items, type=%s, multiday=%s",
+        "Plan built: %s, %d route legs, %d schedule items, type=%s, multiday=%s, crowd=%d",
         intent["venue"][:40],
         len(route),
         len(schedule),
         venue.get("venue_type"),
         is_multiday,
+        crowd_level,
     )
     return plan
 
@@ -211,7 +232,6 @@ def _detect_multiday(
 
 
 def _parse_minutes(drive_str: str) -> int:
-    import re
     total = 0
     h_match = re.search(r'(\d+)\s*hour', drive_str)
     m_match = re.search(r'(\d+)\s*min', drive_str)
@@ -288,8 +308,40 @@ _VENUE_LOCATIONS: dict[str, list[str]] = {
 }
 
 
+def _parse_intent_llm(user_input: str) -> dict[str, str]:
+    """Parse natural-language input using LLM with regex fallback.
+
+    Tries DeepSeek LLM first for high-quality structured extraction.
+    Falls back to the deterministic regex parser if the LLM is
+    unavailable or fails.
+    """
+    if deepseek_client.is_available():
+        try:
+            llm_result = deepseek_client.parse_travel_intent(user_input)
+            if llm_result.get("confidence", 0) >= 0.5:
+                return {
+                    "venue": llm_result.get("venue", user_input),
+                    "location": llm_result.get("location", ""),
+                    "time_of_day": llm_result.get("time_of_day", "morning"),
+                    "raw": user_input,
+                    "starting_location": llm_result.get("starting_location", ""),
+                    "is_multiday": llm_result.get("is_multiday", False),
+                    "restaurant_preferences": llm_result.get("restaurant_preferences", ""),
+                }
+            logger.info("LLM confidence too low (%.2f), falling back to regex", llm_result.get("confidence", 0))
+        except Exception as exc:
+            logger.warning("LLM intent parsing failed: %s", exc)
+
+    return _parse_intent_regex(user_input)
+
+
 def _parse_intent(user_input: str) -> dict[str, str]:
-    """Parse natural-language input into structured intent.
+    """Parse natural-language input into structured intent. (Delegates to LLM-first parser.)"""
+    return _parse_intent_llm(user_input)
+
+
+def _parse_intent_regex(user_input: str) -> dict[str, str]:
+    """Deterministic regex-based intent parser — fallback when LLM unavailable.
 
     Handles city-qualified venues like "Busch Gardens Tampa" by preserving
     the city suffix as the location. Also detects "near X", "in X",
@@ -538,7 +590,6 @@ def _build_route(
 
 def _infer_midpoint(origin: str, destination: str) -> str:
     """Heuristically guess a midpoint city between origin and destination."""
-    import re
     combined = f"{origin} {destination}".lower()
 
     # Known midpoint cities for common Florida routes
@@ -582,7 +633,6 @@ def _infer_midpoint(origin: str, destination: str) -> str:
 
 
 def _is_long_drive(driving_time: str) -> bool:
-    import re
     m = re.search(r'(\d+)', driving_time)
     if m:
         num = int(m.group(1))
@@ -594,7 +644,6 @@ def _is_long_drive(driving_time: str) -> bool:
 
 
 def _estimate_total_drive(route: list[dict]) -> float:
-    import re
     total_min = 0
     for leg in route:
         step = leg.get("step", "")
@@ -632,8 +681,6 @@ def _build_schedule(
         # No user-provided departure time — leave schedule times empty or use defaults
         dep_time_str = "08:00 AM"
     dep_hour, dep_min = _parse_time(dep_time_str)
-
-    import re
 
     venue_type = venue.get("venue_type", "general")
     attractions = venue.get("top_attractions", [f"Explore {intent['venue']}"])
@@ -924,7 +971,6 @@ def _pick_departure_time(intent: dict[str, str], venue: dict) -> str:
 
 
 def _infer_venue_open_hour(venue_type: str, venue: dict) -> int:
-    import re
     hours_text = venue.get("hours", "")
     m = re.search(r'(\d{1,2})\s*(?::\d{2})?\s*(?:AM|am)', hours_text)
     if m:
@@ -942,7 +988,6 @@ def _infer_venue_open_hour(venue_type: str, venue: dict) -> int:
 
 def _infer_venue_close_hour(venue_type: str, venue: dict) -> int:
     """Return the 24-hour closing hour for a venue type."""
-    import re
     hours_text = venue.get("hours", "")
     m = re.search(r'(\d{1,2})\s*(?::\d{2})?\s*(?:PM|pm)', hours_text)
     if m:
@@ -960,7 +1005,6 @@ def _infer_venue_close_hour(venue_type: str, venue: dict) -> int:
 
 
 def _estimate_drive_minutes(step: str) -> int:
-    import re
     h_match = re.search(r'(\d+)\s*hour', step)
     m_match = re.search(r'(\d+)\s*min', step)
     total = 0
@@ -985,7 +1029,6 @@ def _check_traffic_warning(step: str) -> str | None:
 
 
 def _parse_time(time_str: str) -> tuple[int, int]:
-    import re
     m = re.match(r'(\d{1,2}):(\d{2})\s*(AM|PM)', time_str, re.IGNORECASE)
     if not m:
         return (8, 0)
@@ -1022,7 +1065,6 @@ def _normalize_departure_time(raw: str) -> str:
     Accepts '7:00 AM', '07:00', '7am', '0700', '7:00AM', etc.
     Returns the normalized time string or the raw input if unparseable.
     """
-    import re
     stripped = raw.strip().upper()
     # Try "H:MM AM/PM" or "HH:MM AM/PM"
     m = re.match(r'(\d{1,2}):(\d{2})\s*(AM|PM)?', stripped)
@@ -1030,7 +1072,16 @@ def _normalize_departure_time(raw: str) -> str:
         hour = int(m.group(1))
         minute = int(m.group(2))
         meridiem = m.group(3) or ('AM' if hour < 12 else 'PM')
-        return _fmt_time(hour if meridiem == 'AM' or hour == 12 else hour + 12, minute)
+        # Convert to 24-hour for _fmt_time:
+        # - 12:xx AM → hour 0 (midnight)
+        # - 12:xx PM → hour 12 (noon, unchanged)
+        # - AM otherwise → hour unchanged
+        # - PM otherwise → hour + 12
+        if meridiem == 'AM' and hour == 12:
+            hour = 0
+        elif meridiem == 'PM' and hour != 12:
+            hour += 12
+        return _fmt_time(hour, minute)
     # Try "7am", "7 AM", "07:00AM" etc without minutes
     m = re.match(r'(\d{1,2})\s*(AM|PM)', stripped)
     if m:

@@ -3,7 +3,6 @@
 import copy
 import logging
 import os
-import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -18,6 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.config import get_settings
+from app.engine import calendar, plan_store
 from app.engine.planner import build_travel_plan
 from app.schemas.requests import TravelRequest
 
@@ -67,12 +67,6 @@ def _secure_compare(a: str, b: str) -> bool:
     for x, y in zip(a, b):
         result |= ord(x) ^ ord(y)
     return result == 0
-
-
-# ---------------------------------------------------------------------------
-# In-memory plan store (keyed by UUID)
-# ---------------------------------------------------------------------------
-_plan_store: dict[str, dict] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -191,8 +185,8 @@ def travel_plan(request: Request, payload: TravelRequest) -> dict:
     """Full Pydantic-validated itinerary, persisted for later modification.
 
     Accepts optional starting_location and restaurant_preferences to customize
-    the generated itinerary. Plan is stored in-memory and returned with a
-    plan_id for future PATCH operations.
+    the generated itinerary. Plan is stored in a persistent SQLite-backed
+    store and returned with a plan_id for future PATCH operations.
     """
     logger.info(
         "/travel requested: %s (start=%s, restaurant=%s)",
@@ -209,8 +203,7 @@ def travel_plan(request: Request, payload: TravelRequest) -> dict:
     )
 
     if "error" not in result:
-        plan_id = str(uuid.uuid4())
-        _plan_store[plan_id] = copy.deepcopy(result)
+        plan_id = plan_store.save_plan(copy.deepcopy(result))
         result["plan_id"] = plan_id
         logger.info("Plan saved as %s", plan_id)
 
@@ -220,10 +213,34 @@ def travel_plan(request: Request, payload: TravelRequest) -> dict:
 @app.get("/travel/{plan_id}")
 def get_plan(plan_id: str) -> dict:
     """Retrieve a previously generated plan by its ID."""
-    plan = _plan_store.get(plan_id)
+    plan = plan_store.get_plan(plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail=f"Plan not found: {plan_id}")
-    return {"plan_id": plan_id, **plan}
+    return {"plan_id": plan_id, **{k: v for k, v in plan.items() if k != "plan_id"}}
+
+
+@app.get("/travel/{plan_id}/calendar")
+def download_calendar(plan_id: str):
+    """Download the itinerary as an iCalendar (.ics) file.
+
+    Import into Google Calendar, Apple Calendar, Outlook, or any
+    standards-compliant calendar app.  Each schedule item becomes
+    a timed event with location links and reminder alarms.
+    """
+    plan = plan_store.get_plan(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail=f"Plan not found: {plan_id}")
+
+    ics_content = calendar.generate_icalendar(plan, plan_id)
+
+    from fastapi.responses import Response
+    return Response(
+        content=ics_content,
+        media_type="text/calendar",
+        headers={
+            "Content-Disposition": f'attachment; filename="plan-it-{plan_id[:8]}.ics"',
+        },
+    )
 
 
 @app.patch("/travel/{plan_id}")
@@ -239,7 +256,7 @@ def modify_plan(plan_id: str, update: PlanUpdate) -> dict:
 
     Modifications are applied in order. A new UUID is issued on each modification.
     """
-    plan = _plan_store.get(plan_id)
+    plan = plan_store.get_plan(plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail=f"Plan not found: {plan_id}")
 
@@ -293,11 +310,13 @@ def modify_plan(plan_id: str, update: PlanUpdate) -> dict:
     plan["total_wait_min"] = total_wait
 
     # Issue new plan_id on modification so the original is preserved
-    new_plan_id = str(uuid.uuid4())
-    _plan_store[new_plan_id] = copy.deepcopy(plan)
+    new_plan_id = plan_store.update_plan(plan_id, copy.deepcopy(plan))
+    if new_plan_id is None:
+        raise HTTPException(status_code=500, detail="Failed to persist plan update")
     logger.info("Modified plan saved as %s (was %s)", new_plan_id, plan_id)
 
-    return {"plan_id": new_plan_id, **plan}
+    plan["plan_id"] = new_plan_id
+    return {"plan_id": new_plan_id, **{k: v for k, v in plan.items() if k != "plan_id"}}
 
 
 @app.post("/start-day")

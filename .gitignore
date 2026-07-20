@@ -27,3 +27,9 @@ dist/
 .env.*
 !.env.example
 pyarmor.bug.log
+
+# SQLite database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

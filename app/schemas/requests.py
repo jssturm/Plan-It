@@ -73,7 +73,12 @@ class TravelRequest(BaseModel):
             raise ValueError("input must not be empty or whitespace-only")
         # Reject prompt-injection / system-override attempts before any
         # processing. This protects the planner from malicious input that
-        # tries to override system instructions.
+        # tries to override system instructions.  All user-supplied free-text
+        # fields are checked, not just ``input``.
         if _contains_injection(self.input):
             raise ValueError("input contains disallowed content")
+        if self.starting_location and _contains_injection(self.starting_location):
+            raise ValueError("starting_location contains disallowed content")
+        if self.restaurant_preferences and _contains_injection(self.restaurant_preferences):
+            raise ValueError("restaurant_preferences contains disallowed content")
         return self

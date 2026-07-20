@@ -200,6 +200,14 @@
   <script src="/js/i18n.js"></script>
   <script src="/js/app.js"></script>
 
-<script defer src="/_vercel/insights/script.js"></script>
+<script>
+  // Only load Vercel Analytics in production (skip local/dev 404 noise)
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    var va = document.createElement('script');
+    va.defer = true;
+    va.src = '/_vercel/insights/script.js';
+    document.body.appendChild(va);
+  }
+</script>
 </body>
 </html>
