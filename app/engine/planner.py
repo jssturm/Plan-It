@@ -253,10 +253,12 @@ def _parse_minutes(drive_str: str) -> int:
 # Intent parsing — extract venue, location, date from free text
 # ---------------------------------------------------------------------------
 
-_VENUE_INDICATORS = [
-    "to ", "at ", "visit ", "trip to ", "plan ", "going to ",
-    "travel to ", "head to ", "explore ", "tour ",
-]
+# Sorted longest-first so "travel to" matches before "to", "day at" before "at", etc.
+# Only includes phrases that directly precede a venue name — no standalone noise words.
+_VENUE_INDICATORS = sorted([
+    "travel to ", "going to ", "head to ", "trip to ", "day at ",
+    "explore ", "visit ", "tour ", "at ",
+], key=lambda x: -len(x))
 
 _PARK_NAMES: dict[str, str] = {
     "disney": "Walt Disney World",
@@ -361,31 +363,51 @@ def _parse_intent_regex(user_input: str) -> dict[str, str]:
 
     # 0. Extract "from X" / "leaving from X" patterns BEFORE venue extraction,
     #    so the origin address doesn't interfere with venue parsing.
+    #    For addresses, we look for a street-number pattern and try to grab
+    #    the full address including city/state/zip.
     inferred_start: str = ""
     for marker in (" from ", " leaving from ", " departing from "):
         if marker in text_lower:
             after_from = text_lower.split(marker, 1)[-1]
-            # Grab everything after the marker until a comma + time/agenda word
-            candidate = (
-                after_from.split(",")[0]
-                .split(" tomorrow")[0]
-                .split(" today")[0]
-                .split(" with")[0]
-                .split(" and ")[0]
-                .split(" to ")[0]
-                .strip()
+            # Try to extract a full address (digits + street + city + state + zip pattern)
+            addr_match = re.search(
+                r'(\d+\s+[\w\s]+(?:dr|drive|st|street|ave|avenue|rd|road|blvd|blvd\.|ln|lane|ct|court|way|cir|circle|pl|place|trl|trail)\.?\s*,?\s*[\w\s]+,\s*[a-z]{2}\s*\d{5}(?:-\d{4})?)',
+                after_from, re.IGNORECASE,
             )
+            if addr_match:
+                candidate = addr_match.group(1).strip()
+            else:
+                # Fallback: grab text until a stop-word, keeping commas for addresses
+                candidate = (
+                    after_from.split(" tomorrow")[0]
+                    .split(" today")[0]
+                    .split(" with ")[0]
+                    .split(" and I ")[0]
+                    .split(" and i ")[0]
+                    .split(". I ")[0]
+                    .split(". i ")[0]
+                    .strip()
+                )
             if candidate and len(candidate) > 2:
-                inferred_start = candidate.title()
+                # Strip noise prefixes like "my house", "my home", "home"
+                candidate = _strip_address_noise(candidate)
+                inferred_start = candidate.title() if candidate else ""
             break
 
-    # 1. Extract venue name via indicator phrases
+    # 1. Extract venue name via indicator phrases.
+    #    First isolate the sentence containing the venue to avoid trailing noise.
     venue = text  # fallback
     for indicator in _VENUE_INDICATORS:
         if indicator in text_lower:
             after = text.split(indicator, 1)[-1].strip()
+            # Truncate at sentence boundaries before applying word-level splits
+            first_sentence = (
+                after.split(". ")[0]
+                .split("! ")[0]
+                .split("? ")[0]
+            )
             venue = (
-                after.split(",")[0]
+                first_sentence.split(",")[0]
                 .split(" tomorrow")[0]
                 .split(" today")[0]
                 .split(" this")[0]
@@ -479,12 +501,27 @@ def _match_location_suffix(known_key: str, remainder: str) -> str | None:
     return None
 
 
+def _strip_address_noise(text: str) -> str:
+    """Remove noise prefixes from extracted addresses like 'my house', 'home', etc."""
+    noise_prefixes = [
+        "my house ", "my home ", "my place ", "our house ", "our home ",
+        "home ", "house ", "my ", "our ",
+    ]
+    text_lower = text.lower()
+    for prefix in noise_prefixes:
+        if text_lower.startswith(prefix):
+            return text[len(prefix):].strip()
+    return text
+
+
 def _clean_location_remainder(remainder: str) -> str:
     """Clean up a location remainder, filtering noise words."""
     noise = {
         "tomorrow", "today", "with", "and", "for", "from", "the",
         "next", "week", "weekend", "morning", "afternoon", "evening",
         "lunch", "dinner", "trip", "plan", "park", "a", "an",
+        "studios", "museums", "museum", "gallery", "gardens",
+        "world", "land", "center", "space",
     }
     words = remainder.lower().split()
     filtered = [w for w in words if w not in noise]
