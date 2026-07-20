@@ -520,6 +520,12 @@ def _osrm_transit(origin: str, destination: str) -> dict[str, str] | None:
     then the OSRM public routing API to calculate actual drive duration
     on the real road network. No API keys, no rate limits beyond fair use.
 
+    When the origin geocodes to the continental US and the destination
+    lacks state/country qualification (no comma), appends ``, USA`` to
+    the destination query to prevent ambiguous city names like
+    *Portland*, *Springfield*, or *St. Petersburg* from resolving to
+    their more-famous international counterparts.
+
     Returns None when geocoding or routing fails.
     """
     import urllib.request
@@ -527,23 +533,41 @@ def _osrm_transit(origin: str, destination: str) -> dict[str, str] | None:
     import json
     import time
 
-    # ── Step 1: Geocode both addresses to lat/lon ──────────────────────
-    coords: list[tuple[float, float]] = []
-    for addr in (origin, destination):
-        coord = _geocode_census(addr)
-        if coord:
-            coords.append(coord)
-            continue
-        time.sleep(1.2)  # Nominatim rate limit: 1 req/s
-        coord = _geocode_nominatim(addr)
-        if coord:
-            coords.append(coord)
-            continue
-        logger.warning("All geocoders failed for %r", addr[:60])
+    # ── Step 1a: Geocode origin to determine country context ────────────
+    origin_coord = _geocode_census(origin)
+    if not origin_coord:
+        time.sleep(1.2)
+        origin_coord = _geocode_nominatim(origin)
+    if not origin_coord:
+        logger.warning("All geocoders failed for origin %r", origin[:60])
         return None
 
-    lat1, lon1 = coords[0]
-    lat2, lon2 = coords[1]
+    # ── Step 1b: Bias destination toward US when appropriate ────────────
+    origin_lat, origin_lon = origin_coord
+    in_us = 24.0 <= origin_lat <= 49.5 and -125.0 <= origin_lon <= -66.0
+
+    dest_query = destination
+    if in_us and "," not in destination:
+        # Destination is an unqualified city name — append country context
+        # so Nominatim resolves "Portland" → Portland, OR (not UK),
+        # "St. Petersburg" → Florida (not Russia), etc.
+        dest_query = f"{destination}, USA"
+
+    # ── Step 1c: Geocode destination (with bias, falling back without) ──
+    dest_coord = _geocode_census(dest_query)
+    if not dest_coord:
+        time.sleep(1.2)
+        dest_coord = _geocode_nominatim(dest_query)
+    if not dest_coord and dest_query != destination:
+        # Retry without US bias in case the city genuinely isn't in the US
+        time.sleep(1.2)
+        dest_coord = _geocode_nominatim(destination)
+    if not dest_coord:
+        logger.warning("All geocoders failed for destination %r", destination[:60])
+        return None
+
+    lat1, lon1 = origin_coord
+    lat2, lon2 = dest_coord
 
     # ── Step 2: Real routing via OSRM public API ───────────────────────
     route_url = f"https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
