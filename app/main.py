@@ -195,17 +195,27 @@ def travel_plan(request: Request, payload: TravelRequest) -> dict:
         payload.restaurant_preferences[:40] if payload.restaurant_preferences else "none",
     )
 
-    result = build_travel_plan(
-        user_input=payload.input,
-        starting_location=payload.starting_location,
-        restaurant_preferences=payload.restaurant_preferences,
-        departure_time=payload.departure_time,
-    )
+    try:
+        result = build_travel_plan(
+            user_input=payload.input,
+            starting_location=payload.starting_location,
+            restaurant_preferences=payload.restaurant_preferences,
+            departure_time=payload.departure_time,
+        )
+    except Exception as exc:
+        logger.exception("Unhandled error in build_travel_plan")
+        raise HTTPException(status_code=500, detail=f"Planner error: {exc}")
 
     if "error" not in result:
-        plan_id = plan_store.save_plan(copy.deepcopy(result))
-        result["plan_id"] = plan_id
-        logger.info("Plan saved as %s", plan_id)
+        try:
+            plan_id = plan_store.save_plan(copy.deepcopy(result))
+            result["plan_id"] = plan_id
+            logger.info("Plan saved as %s", plan_id)
+        except Exception as exc:
+            # Persistence failure is non-fatal — return the plan without storing it
+            logger.warning("Failed to persist plan (non-fatal): %s", exc)
+            result["plan_id"] = "unsaved"
+            result["_persist_error"] = str(exc)
 
     return result
 
@@ -336,11 +346,15 @@ def start_day(request: Request, payload: TravelRequest) -> dict:
       - actions             → future-proof action queue
     """
     logger.info("/start-day requested: %s", payload.input[:80])
-    result = build_travel_plan(
-        user_input=payload.input,
-        starting_location=payload.starting_location,
-        restaurant_preferences=payload.restaurant_preferences,
-    )
+    try:
+        result = build_travel_plan(
+            user_input=payload.input,
+            starting_location=payload.starting_location,
+            restaurant_preferences=payload.restaurant_preferences,
+        )
+    except Exception as exc:
+        logger.exception("Unhandled error in start-day build_travel_plan")
+        raise HTTPException(status_code=500, detail=f"Planner error: {exc}")
 
     if "error" in result:
         return result

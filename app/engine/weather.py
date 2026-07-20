@@ -20,6 +20,11 @@ from typing import Any
 
 logger = logging.getLogger("plan-it.weather")
 
+# Vercel serverless has a 10-second function timeout on Hobby plans.
+# Weather lookups must complete well under that budget or risk 504s.
+_GEOCODE_TIMEOUT_S = 3
+_FORECAST_TIMEOUT_S = 5
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -158,7 +163,7 @@ def _geocode_location(name: str) -> tuple[float | None, float | None]:
     url = f"https://nominatim.openstreetmap.org/search?{params}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=_GEOCODE_TIMEOUT_S) as resp:
             data = json.loads(resp.read().decode())
             if data:
                 return (float(data[0]["lat"]), float(data[0]["lon"]))

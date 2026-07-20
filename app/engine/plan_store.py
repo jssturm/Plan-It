@@ -25,18 +25,34 @@ logger = logging.getLogger("plan-it.plan_store")
 # Database path — data dir for local dev, /tmp for Vercel serverless
 # ---------------------------------------------------------------------------
 def _store_path() -> Path:
-    """Resolve the plan-store SQLite database path."""
+    """Resolve the plan-store SQLite database path.
+
+    On Vercel (detected via VERCEL env var) the filesystem is read-only
+    except for /tmp, so we always use /tmp there.  Locally we prefer the
+    project data/ directory for persistence across restarts.
+    """
     # Explicit override for testing / custom deployments
     env_path = os.environ.get("PLAN_STORE_PATH")
     if env_path:
         return Path(env_path)
 
-    # Prefer the project data directory (persists across local restarts)
+    # Vercel serverless — /tmp is the only writable directory
+    if os.environ.get("VERCEL"):
+        return Path("/tmp") / "plan-it-plans.db"
+
+    # Local development — persist in the project data directory
     project_data = Path(__file__).resolve().parent.parent.parent / "data"
     if project_data.is_dir():
-        return project_data / "plans.db"
+        try:
+            # Verify the directory is writable before committing to it
+            test_file = project_data / ".plan_store_write_test"
+            test_file.touch()
+            test_file.unlink()
+            return project_data / "plans.db"
+        except (OSError, PermissionError):
+            pass
 
-    # Vercel /tmp — persists within a warm instance lifecycle
+    # Fallback — /tmp always works
     return Path("/tmp") / "plan-it-plans.db"
 
 

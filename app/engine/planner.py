@@ -95,21 +95,28 @@ def build_travel_plan(
     schedule = _inject_restaurants(schedule, restaurants, restaurant_preferences)
 
     # 8a. Crowd prediction — venue-specific crowd level and tips
-    crowd_level = crowd.get_crowd_level(intent["venue"])
-    crowd_tips = crowd.get_crowd_tips(intent["venue"], crowd_level)
-    if crowd_tips:
-        strategy = list(crowd_tips) + strategy
+    crowd_level = 5  # default: average
+    try:
+        crowd_level = crowd.get_crowd_level(intent["venue"])
+        crowd_tips = crowd.get_crowd_tips(intent["venue"], crowd_level)
+        if crowd_tips:
+            strategy = list(crowd_tips) + strategy
+    except Exception:
+        logger.warning("Crowd prediction failed, using defaults", exc_info=True)
 
-    # 8b. Weather forecast — free Open-Meteo API
-    weather_ctx = weather.weather_summary_for_plan(
-        intent["venue"], intent.get("location", "")
-    )
-    if weather_ctx:
-        strategy.append(weather_ctx["note"])
-        for alert in weather_ctx.get("alerts", []):
-            alerts.append(alert)
-        for pack in weather_ctx.get("packing", []):
-            strategy.append(f"Pack: {pack}")
+    # 8b. Weather forecast — free Open-Meteo API (non-critical)
+    try:
+        weather_ctx = weather.weather_summary_for_plan(
+            intent["venue"], intent.get("location", "")
+        )
+        if weather_ctx:
+            strategy.append(weather_ctx["note"])
+            for alert in weather_ctx.get("alerts", []):
+                alerts.append(alert)
+            for pack in weather_ctx.get("packing", []):
+                strategy.append(f"Pack: {pack}")
+    except Exception:
+        logger.warning("Weather lookup failed, continuing without forecast", exc_info=True)
 
     # 9. Assemble the full plan
 
