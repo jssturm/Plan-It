@@ -92,7 +92,7 @@
       $planDetailTitle, $planDetailSubtitle;
 
   // Form
-  let $tripInput, $tripStart, $tripDepartureHh, $tripDepartureMm, $tripDepartureAmpm, $tripRestaurants, $btnGenerate;
+  let $tripInput, $tripStart, $tripDepartureHh, $tripDepartureMm, $tripDepartureAmpm, $tripRestaurants, $tripReminderDefault, $btnGenerate;
 
   // Modal
   let $modalContainer;
