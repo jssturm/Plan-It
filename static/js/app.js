@@ -227,6 +227,7 @@
   $tripDepartureMm = $("#trip-departure-mm");
   $tripDepartureAmpm = $("#trip-departure-ampm");
   $tripRestaurants = $("#trip-restaurants");
+  $tripReminderDefault = $("#trip-reminder-default");
   $btnGenerate = $("#btn-generate");
 
     $modalContainer = $("#modal-container");
@@ -449,6 +450,9 @@
       if (start) payload.starting_location = start;
       if (departure) payload.departure_time = departure;
       if (restaurants) payload.restaurant_preferences = restaurants;
+      if ($tripReminderDefault && $tripReminderDefault.checked) {
+        payload.default_reminder_min = 15;
+      }
 
       const plan = await apiPost("/travel", payload);
 

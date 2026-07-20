@@ -48,6 +48,19 @@
   --text-2xl: 1.75rem;
   --text-3xl: 2.25rem;
 
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
   /* Spacing scale */
   --space-1: 4px;
   --space-2: 8px;
@@ -540,6 +553,26 @@ ul, ol {
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Form Checkbox
+   -------------------------------------------------------------------------- */
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  user-select: none;
+}
+.form-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .page-header {

@@ -30,6 +30,7 @@ def build_travel_plan(
     starting_location: str | None = None,
     restaurant_preferences: str | None = None,
     departure_time: str | None = None,
+    default_reminder_min: int | None = None,
 ) -> dict:
     """Given a natural-language trip description, return a validated TravelPlan dict.
 
@@ -97,6 +98,12 @@ def build_travel_plan(
         # Prepend so they get used for Day 2 lunch first
         ret_restaurants.extend(restaurants)
         restaurants = ret_restaurants
+
+    # 7a. Apply default reminder to all schedule items
+    if default_reminder_min:
+        for item in schedule:
+            if item.get("reminder_min") is None:
+                item["reminder_min"] = default_reminder_min
 
     # 8. Inject restaurant recommendations into schedule items
     schedule = _inject_restaurants(schedule, restaurants, restaurant_preferences)

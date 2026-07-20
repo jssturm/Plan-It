@@ -60,6 +60,8 @@
       "newTrip.restaurantPrefs": "Restaurant Preferences",
       "newTrip.restaurantPlaceholder": "e.g. vegetarian, Italian, $$-$$$ range",
       "newTrip.restaurantHint": "Diet, cuisine, or price preferences for meal stops.",
+      "newTrip.reminderDefault": "Remind me 15 minutes before each stop",
+      "newTrip.reminderHint": "Sets a default reminder for every schedule item. You can adjust individual reminders after generating.",
       "newTrip.generate": "\uD83D\uDE80 Generate Itinerary",
       "newTrip.generating": "Generating...",
 
@@ -256,6 +258,8 @@
       "newTrip.restaurantPrefs": "Preferencias de Restaurante",
       "newTrip.restaurantPlaceholder": "Ej. vegetariano, italiana, rango $$-$$$",
       "newTrip.restaurantHint": "Preferencias de dieta, cocina o precio para las paradas de comida.",
+      "newTrip.reminderDefault": "Recordarme 15 minutos antes de cada parada",
+      "newTrip.reminderHint": "Configura un recordatorio por defecto para cada elemento del horario. Puedes ajustar recordatorios individuales después de generar.",
       "newTrip.generate": "\uD83D\uDE80 Generar Itinerario",
       "newTrip.generating": "Generando...",
 

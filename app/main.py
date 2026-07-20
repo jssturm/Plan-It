@@ -201,6 +201,7 @@ def travel_plan(request: Request, payload: TravelRequest) -> dict:
             starting_location=payload.starting_location,
             restaurant_preferences=payload.restaurant_preferences,
             departure_time=payload.departure_time,
+            default_reminder_min=payload.default_reminder_min,
         )
     except Exception as exc:
         logger.exception("Unhandled error in build_travel_plan")
@@ -230,12 +231,17 @@ def get_plan(plan_id: str) -> dict:
 
 
 @app.get("/travel/{plan_id}/calendar")
-def download_calendar(plan_id: str):
-    """Download the itinerary as an iCalendar (.ics) file.
+def download_calendar(plan_id: str, request: Request):
+    """Download or subscribe to the itinerary as an iCalendar (.ics) file.
 
-    Import into Google Calendar, Apple Calendar, Outlook, or any
-    standards-compliant calendar app.  Each schedule item becomes
-    a timed event with location links and reminder alarms.
+    - Browser access: downloads the .ics file for manual import.
+    - Calendar app subscribe: use the URL directly in Google Calendar,
+      Apple Calendar, or Outlook's 'Subscribe to Calendar' feature.
+      The calendar app will poll this URL for updates.
+
+    Each schedule item becomes a timed event with location links and
+    reminder alarms.  Changes to the itinerary (via PATCH) are reflected
+    on the next calendar app refresh.
     """
     plan = plan_store.get_plan(plan_id)
     if plan is None:
@@ -244,13 +250,23 @@ def download_calendar(plan_id: str):
     ics_content = calendar.generate_icalendar(plan, plan_id)
 
     from fastapi.responses import Response
-    return Response(
-        content=ics_content,
-        media_type="text/calendar",
-        headers={
-            "Content-Disposition": f'attachment; filename="plan-it-{plan_id[:8]}.ics"',
-        },
+
+    # If the user-agent is a calendar app (or webcal:// protocol via redirect),
+    # serve the content inline for subscription.  Browsers get a download.
+    ua = request.headers.get("user-agent", "").lower()
+    is_calendar_app = any(
+        kw in ua for kw in ("calendar", "ical", "outlook", "caldav", "webcal")
     )
+
+    headers: dict[str, str] = {}
+    if is_calendar_app:
+        headers["Content-Disposition"] = "inline"
+    else:
+        headers["Content-Disposition"] = (
+            f'attachment; filename="plan-it-{plan_id[:8]}.ics"'
+        )
+
+    return Response(content=ics_content, media_type="text/calendar", headers=headers)
 
 
 @app.patch("/travel/{plan_id}")

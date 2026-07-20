@@ -48,6 +48,13 @@ class TravelRequest(BaseModel):
         "requests for meal stops (e.g. 'vegetarian, prefer Italian, no fast food')",
         examples=["vegetarian, prefer Italian, $$-$$$ range"],
     )
+    default_reminder_min: Optional[int] = Field(
+        default=None,
+        ge=5,
+        le=60,
+        description="Default reminder minutes to apply to every schedule item. "
+        "Users can override individual items after generation.",
+    )
     departure_time: Optional[str] = Field(
         default=None,
         min_length=1,
