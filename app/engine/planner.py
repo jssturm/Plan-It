@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import random
 import re
+import urllib.parse
 from datetime import date
 
 from dateutil.parser import parse as parse_date
@@ -638,13 +639,13 @@ def _build_route(
             "step": step_text,
             "maps_url": transit.get(
                 "maps_url",
-                f'https://www.google.com/maps/dir/?api=1&destination={destination.replace(" ", "+")}',
+                f'https://www.google.com/maps/dir/?api=1&destination={urllib.parse.quote(destination, safe="")}',
             ),
         })
     else:
         # No starting location — provide a generic route entry with
         # directions to the destination only.
-        maps_url = f'https://www.google.com/maps/dir/?api=1&destination={destination.replace(" ", "+")}'
+        maps_url = f'https://www.google.com/maps/dir/?api=1&destination={urllib.parse.quote(destination, safe="")}'
         route.append({
             "step": f"Head to {destination} — get directions via the map link below",
             "maps_url": maps_url,
@@ -680,21 +681,23 @@ def _build_route(
             else:
                 meal_label = "Dinner"
 
+            maps_query = _maps_search_location(midpoint, destination)
             route.append({
                 "step": f"{meal_label} stop ~{hours_in}h in near {midpoint} — {meal_label.lower()}, stretch your legs, ~30 min",
-                "maps_url": f'https://www.google.com/maps/search/restaurants+near+{midpoint.replace(" ", "+")}',
+                "maps_url": f'https://www.google.com/maps/search/restaurants+near+{maps_query}',
             })
         # If no 4h stops were added but it's over 1h, inject a midpoint break
         if stop_counter == 0 and drive_min > 60:
             midpoint = _infer_midpoint(origin, destination)
+            maps_query = _maps_search_location(midpoint, destination)
             route.append({
                 "step": f"Breakfast stop en route near {midpoint} — stretch, coffee, and a quick bite, ~20 min",
-                "maps_url": f'https://www.google.com/maps/search/breakfast+near+{midpoint.replace(" ", "+")}',
+                "maps_url": f'https://www.google.com/maps/search/breakfast+near+{maps_query}',
             })
     elif user_wants_breakfast:
         route.append({
             "step": f"Quick coffee and breakfast stop before hitting the road — 15 minutes",
-            "maps_url": f'https://www.google.com/maps/search/breakfast+near+{origin.replace(" ", "+")}',
+            "maps_url": f'https://www.google.com/maps/search/breakfast+near+{urllib.parse.quote(origin, safe="")}',
         })
 
     return route
@@ -737,6 +740,20 @@ def _infer_midpoint(origin: str, destination: str) -> str:
             return city
 
     return "the halfway point"
+
+
+def _maps_search_location(midpoint: str, fallback_destination: str) -> str:
+    """Return a URL-encoded location string for Google Maps URLs.
+
+    When the midpoint heuristic returns 'the halfway point' (unknown),
+    falls back to the destination so Google Maps opens a meaningful
+    location instead of the user's current position.
+
+    Uses ``urllib.parse.quote`` for proper encoding of special characters
+    (commas, ampersands, etc.) that ``.replace(' ', '+')`` would miss.
+    """
+    location = fallback_destination if midpoint == "the halfway point" else midpoint
+    return urllib.parse.quote(location, safe="")
 
 
 # ---------------------------------------------------------------------------
@@ -959,8 +976,8 @@ def _build_schedule(
 
         maps_url = None
         if i > 0 and i - 1 < len(attractions):
-            prev = attractions[i - 1].split(" — ")[0].replace(" ", "+")
-            curr = attraction.split(" — ")[0].replace(" ", "+")
+            prev = urllib.parse.quote(attractions[i - 1].split(" — ")[0], safe="")
+            curr = urllib.parse.quote(attraction.split(" — ")[0], safe="")
             maps_url = f"https://www.google.com/maps/dir/?api=1&origin={prev}&destination={curr}&travelmode=walking"
 
         schedule.append({
@@ -1023,7 +1040,7 @@ def _build_schedule(
             "restaurant": "Restaurant recommendation TBD",
             "meal_timing_note": f"Midpoint of {dest_name} → {origin} — good time to take a break",
             "reminder_min": None,
-            "walking_map_url": f'https://www.google.com/maps/search/restaurants+near+{midpoint.replace(" ", "+")}',
+            "walking_map_url": f'https://www.google.com/maps/search/restaurants+near+{_maps_search_location(midpoint, dest_name)}',
             "backup_plan": f"Grab fast food or pack snacks for the road if pressed for time",
         })
 
@@ -1046,7 +1063,7 @@ def _build_schedule(
             "reminder_min": None,
             "walking_map_url": ret_transit.get(
                 "maps_url",
-                f'https://www.google.com/maps/dir/?api=1&destination={origin.replace(" ", "+")}',
+                f'https://www.google.com/maps/dir/?api=1&destination={urllib.parse.quote(origin, safe="")}',
             ),
             "backup_plan": None,
         })
@@ -1065,7 +1082,7 @@ def _build_schedule(
         })
 
         # Add return drive to route for completeness
-        dest_enc = origin.replace(" ", "+")
+        dest_enc = urllib.parse.quote(origin, safe="")
         ret_step = f"Return drive: {dest_name} → {origin}"
         if ret_drive and ret_drive[0].isdigit():
             ret_step += f" — approximately {ret_drive}"
