@@ -549,6 +549,65 @@ ul, ol {
   margin: 0 auto;
 }
 
+/* --------------------------------------------------------------------------
+   Page Hero — large logo banner on the New Trip page
+   -------------------------------------------------------------------------- */
+.page-hero {
+  text-align: center;
+  padding: var(--space-8) 0 var(--space-6);
+}
+
+.page-hero-logo {
+  display: block;
+  margin: 0 auto var(--space-4);
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
+  transition: transform 0.3s ease;
+}
+
+.page-hero-logo:hover {
+  transform: scale(1.05);
+}
+
+.page-hero-title {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-1);
+  letter-spacing: -0.02em;
+}
+
+.page-hero-version {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-bg-chip);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-2);
+}
+
+.page-hero-tagline {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* Responsive — tighten hero on mobile */
+@media (max-width: 768px) {
+  .page-hero {
+    padding: var(--space-4) 0 var(--space-4);
+  }
+  .page-hero-logo {
+    width: 80px;
+    height: 80px;
+  }
+  .page-hero-title {
+    font-size: var(--text-2xl);
+  }
+}
+
 .page-header {
   margin-bottom: var(--space-8);
 }
