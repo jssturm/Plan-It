@@ -25,15 +25,15 @@
       // App / Branding
       "app.name": "Plan-It",
       "app.version": "v0.3",
-      "app.tagline": "AI-powered travel itinerary builder",
+      "app.tagline": "AI-powered day itinerary builder",
 
       // Navigation
       "nav.home": "\uD83C\uDFE0 Home",
       "nav.plan": "Plan",
-      "nav.newTrip": "\u2795 New Trip",
-      "nav.myPlans": "\uD83D\uDCC3 My Plans",
+      "nav.newTrip": "\u2795 New Itinerary",
+      "nav.myPlans": "\uD83D\uDCC3 My Itineraries",
       "nav.savedPlan": "Saved Plan",
-      "nav.noSavedPlans": "No saved plans yet",
+      "nav.noSavedPlans": "No saved itineraries yet",
 
       // Health
       "health.checking": "API checking...",
@@ -41,17 +41,17 @@
       "health.unreachable": "API unreachable",
 
       // Topbar
-      "topbar.newTrip": "New Trip",
-      "topbar.myPlans": "My Plans",
+      "topbar.newTrip": "New Itinerary",
+      "topbar.myPlans": "My Itineraries",
       "topbar.itinerary": "Itinerary",
       "topbar.clearAll": "\uD83D\uDDD1 Clear All",
 
       // New Trip Page
-      "newTrip.title": "Plan Your Trip",
-      "newTrip.subtitle": "Describe your plan for the day — where you're going, what you want to do — and get a complete itinerary with route maps, schedule, and operational intelligence.",
-      "newTrip.whatsYourTrip": "What's your trip?",
+      "newTrip.title": "Plan Your Day",
+      "newTrip.subtitle": "Describe your day — where you're going, what you want to do — and get a complete itinerary with route maps, schedule, and operational intelligence.",
+      "newTrip.whatsYourTrip": "Where are you going?",
       "newTrip.tripPlaceholder": "e.g. Drive to Kennedy Space Center from Orlando tomorrow — stop for lunch, stay overnight at a hotel near Cocoa Beach, and drive back the next morning. Need long-term parking at KSC.",
-      "newTrip.tripHint": "Include as many details as possible — venue, date, mode of travel (drive/fly), meal stops, hotel stays, long-term parking, return trip, and any special interests. The more you tell us, the better your itinerary.",
+      "newTrip.tripHint": "Include as many details as possible — venue, date, mode of travel (drive/fly), meal stops, hotel stays, long-term parking, return trip, and any special interests. The more details you provide, the better your itinerary.",
       "newTrip.departureTime": "Departure Time",
       "newTrip.departureHint": "When you plan to leave. Enter the time and select AM or PM.",
       "newTrip.startingLocation": "Starting Location (Street Address, City, State, Zip Code)",
@@ -71,10 +71,10 @@
       "planDetail.deleteConfirm": "This action cannot be undone. The plan will be removed from your session.",
 
       // My Plans Page
-      "myPlans.title": "My Plans",
+      "myPlans.title": "My Itineraries",
       "myPlans.subtitle": "Previously generated itineraries stored in this session.",
-      "myPlans.emptyTitle": "No saved plans",
-      "myPlans.emptyText": "Generate your first itinerary from the New Trip page and it will appear here.",
+      "myPlans.emptyTitle": "No saved itineraries",
+      "myPlans.emptyText": "Generate your first itinerary from the New Itinerary page and it will appear here.",
 
       // Stats
       "stats.departure": "Departure",
@@ -221,15 +221,15 @@
       // App / Branding
       "app.name": "Plan-It",
       "app.version": "v0.3",
-      "app.tagline": "Planificador de viajes con IA",
+      "app.tagline": "Planificador de itinerarios diarios con IA",
 
       // Navigation
       "nav.home": "\uD83C\uDFE0 Inicio",
       "nav.plan": "Planificar",
-      "nav.newTrip": "\u2795 Nuevo Viaje",
-      "nav.myPlans": "\uD83D\uDCC3 Mis Planes",
+      "nav.newTrip": "\u2795 Nuevo Itinerario",
+      "nav.myPlans": "\uD83D\uDCC3 Mis Itinerarios",
       "nav.savedPlan": "Plan Guardado",
-      "nav.noSavedPlans": "No hay planes guardados",
+      "nav.noSavedPlans": "No hay itinerarios guardados",
 
       // Health
       "health.checking": "Verificando API...",
@@ -237,17 +237,17 @@
       "health.unreachable": "API inaccesible",
 
       // Topbar
-      "topbar.newTrip": "Nuevo Viaje",
-      "topbar.myPlans": "Mis Planes",
+      "topbar.newTrip": "Nuevo Itinerario",
+      "topbar.myPlans": "Mis Itinerarios",
       "topbar.itinerary": "Itinerario",
       "topbar.clearAll": "\uD83D\uDDD1 Eliminar Todo",
 
       // New Trip Page
-      "newTrip.title": "Planifica Tu Viaje",
-      "newTrip.subtitle": "Describe tu plan del día — adónde vas, qué quieres hacer — y obtén un itinerario completo con mapas de ruta, horario e inteligencia operativa.",
-      "newTrip.whatsYourTrip": "¿Cuál es tu viaje?",
+      "newTrip.title": "Planifica Tu Día",
+      "newTrip.subtitle": "Describe tu día — adónde vas, qué quieres hacer — y obtén un itinerario completo con mapas de ruta, horario e inteligencia operativa.",
+      "newTrip.whatsYourTrip": "¿Adónde vas?",
       "newTrip.tripPlaceholder": "Ej. Conducir al Centro Espacial Kennedy desde Orlando mañana — parar para almorzar, pasar la noche en un hotel cerca de Cocoa Beach y volver a la mañana siguiente. Necesito estacionamiento de larga estadía en KSC.",
-      "newTrip.tripHint": "Incluye tantos detalles como sea posible — lugar, fecha, modo de viaje (coche/avión), paradas para comer, estancias en hotel, estacionamiento de larga estadía, viaje de regreso e intereses especiales. Cuanto más nos digas, mejor será tu itinerario.",
+      "newTrip.tripHint": "Incluye tantos detalles como sea posible — lugar, fecha, modo de viaje (coche/avión), paradas para comer, estancias en hotel, estacionamiento de larga estadía, viaje de regreso e intereses especiales. Cuantos más detalles, mejor será tu itinerario.",
       "newTrip.departureTime": "Hora de Salida",
       "newTrip.departureHint": "Cuándo planeas salir. Ingresa la hora y selecciona AM o PM.",
       "newTrip.startingLocation": "Lugar de Partida (Dirección, Ciudad, Estado, Código Postal)",
@@ -267,10 +267,10 @@
       "planDetail.deleteConfirm": "Esta acción no se puede deshacer. El plan se eliminará de tu sesión.",
 
       // My Plans Page
-      "myPlans.title": "Mis Planes",
+      "myPlans.title": "Mis Itinerarios",
       "myPlans.subtitle": "Itinerarios generados anteriormente almacenados en esta sesión.",
-      "myPlans.emptyTitle": "Sin planes guardados",
-      "myPlans.emptyText": "Genera tu primer itinerario desde la página de Nuevo Viaje y aparecerá aquí.",
+      "myPlans.emptyTitle": "Sin itinerarios guardados",
+      "myPlans.emptyText": "Genera tu primer itinerario desde la página de Nuevo Itinerario y aparecerá aquí.",
 
       // Stats
       "stats.departure": "Salida",
