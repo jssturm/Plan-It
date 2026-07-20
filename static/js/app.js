@@ -597,11 +597,47 @@
         <a class="btn btn-primary btn-sm" href="/travel/${escapeHtml(planId)}/calendar" download="${'plan-it-' + escapeHtml(planId.slice(0, 8)) + '.ics'}">
           &#128197; ${t("schedule.downloadCalendar")}
         </a>
+        <button class="btn btn-secondary btn-sm" id="btn-print-plan">
+          &#128424; ${t("schedule.print")}
+        </button>
+        <button class="btn btn-secondary btn-sm" id="btn-share-plan" data-plan-id="${escapeHtml(planId)}">
+          &#128279; ${t("schedule.share")}
+        </button>
         <button class="btn btn-danger btn-sm" id="btn-delete-plan" data-plan-id="${escapeHtml(planId)}">
           ${t("planDetail.delete")}
         </button>
       </div>
     `;
+
+    // Bind print
+    const printBtn = $planDetailContent.querySelector("#btn-print-plan");
+    if (printBtn) {
+      printBtn.addEventListener("click", () => { window.print(); });
+    }
+
+    // Bind share
+    const shareBtn = $planDetailContent.querySelector("#btn-share-plan");
+    if (shareBtn) {
+      shareBtn.addEventListener("click", () => {
+        var shareUrl = window.location.origin + "/travel/" + shareBtn.dataset.planId;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(shareUrl).then(function () {
+            showToast(t("toast.linkCopied"), "success");
+          }).catch(function () {
+            showToast(shareUrl, "info");
+          });
+        } else {
+          // Fallback for older browsers
+          var ta = document.createElement("textarea");
+          ta.value = shareUrl;
+          ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          showToast(t("toast.linkCopied"), "success");
+        }
+      });
+    }
 
     // Bind delete
     const delBtn = $planDetailContent.querySelector("#btn-delete-plan");

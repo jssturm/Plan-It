@@ -2115,3 +2115,59 @@ ul, ol {
   color: #86efac;
   border-color: #14532d;
 }
+
+/* --------------------------------------------------------------------------
+   Print Styles — clean itinerary output
+   -------------------------------------------------------------------------- */
+@media print {
+  /* Hide UI chrome */
+  .sidebar, .topbar, .bug-report-fab, .toast-container, #modal-container,
+  .btn, .nav-item, .home-btn, .sidebar-overlay, .mobile-menu-btn,
+  .crowd-banner, .reminder-inline, .schedule-item-actions,
+  .form-group, .form-textarea, .form-input, .form-label, .form-hint,
+  #trip-input, #trip-start, #trip-restaurants, #btn-generate,
+  #trip-departure-hh, #trip-departure-mm, #trip-departure-ampm,
+  #trip-reminder-default, #page-new-trip .page-hero,
+  #page-new-trip .card, #page-my-plans, #plans-list, #plans-empty {
+    display: none !important;
+  }
+
+  /* Full-width content */
+  .main-content {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .page {
+    display: block !important;
+  }
+  .page.hidden { display: block !important; }
+
+  /* Show plan detail content cleanly */
+  #page-plan-detail { display: block !important; }
+  #plan-detail-content { padding: 0; }
+  .section { break-inside: avoid; page-break-inside: avoid; }
+  .timeline-item { break-inside: avoid; }
+
+  /* Remove shadows and borders for ink efficiency */
+  .card, .plan-card, .section {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+
+  /* Black text on white */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+  }
+
+  .text-muted { color: #555 !important; }
+  .dark .text-muted { color: #555 !important; }
+
+  /* Ensure maps URLs are visible */
+  a[href]:after {
+    content: none; /* don't print URLs — they're Google Maps links */
+  }
+}

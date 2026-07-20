@@ -64,20 +64,38 @@ def _ddg() -> Any:
     return _ddgs
 
 
-def _search_ddg(query: str, max_results: int = 8) -> list[dict[str, str]]:
+def _search_ddg(query: str, max_results: int = 8, retries: int = 2) -> list[dict[str, str]]:
     """Run a DuckDuckGo text search via the ``ddgs`` library.
 
+    Retries with exponential backoff on failure (rate limiting, transient
+    network errors).  Returns an empty list if all retries are exhausted.
+
     Returns a list of dicts with keys ``title``, ``href``, ``body``.
-    Returns an empty list on failure (never raises).
     """
-    _rate_wait()
-    try:
-        results = list(_ddg().text(query, max_results=max_results))
-        logger.info("ddg search: %r → %d results", query[:80], len(results))
-        return results
-    except Exception as exc:
-        logger.warning("DuckDuckGo search failed for %r: %s", query[:80], exc)
-        return []
+    import time as _time
+
+    last_error = None
+    for attempt in range(retries + 1):
+        _rate_wait()
+        try:
+            results = list(_ddg().text(query, max_results=max_results))
+            logger.info("ddg search: %r → %d results (attempt %d)", query[:80], len(results), attempt + 1)
+            return results
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries:
+                wait_s = 2 ** attempt  # 1s, 2s
+                logger.warning(
+                    "DuckDuckGo search attempt %d/%d failed, retrying in %ds: %s",
+                    attempt + 1, retries + 1, wait_s, exc,
+                )
+                _time.sleep(wait_s)
+            else:
+                logger.warning(
+                    "DuckDuckGo search failed after %d attempts for %r: %s",
+                    retries + 1, query[:80], last_error,
+                )
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -132,14 +150,14 @@ def _search_searxng(query: str, max_results: int = 8) -> list[dict[str, str]]:
 # ---------------------------------------------------------------------------
 
 def search_web(query: str, max_results: int = 8) -> list[dict[str, str]]:
-    """Run a web search and return a list of result dicts.
+    """Run a web search with automatic backend selection and failover.
 
     Each dict has keys: ``title``, ``href``, ``body``.
 
     The active backend is determined by the ``SEARCH_BACKEND`` env var:
-    - ``ddg`` — DuckDuckGo only
-    - ``searxng`` — SearxNG only
-    - ``auto`` (default) — DDG first, fails over to SearxNG on error/empty
+    - ``ddg`` — DuckDuckGo only (with retry)
+    - ``searxng`` — SearxNG only (public or self-hosted instance)
+    - ``auto`` (default) — DDG first with retry, SearxNG failover on empty/error
 
     Args:
         query: The search query string.
@@ -157,13 +175,20 @@ def search_web(query: str, max_results: int = 8) -> list[dict[str, str]]:
     if backend == "ddg":
         return _search_ddg(query, max_results)
 
-    # "auto" — try DDG first, fall back to SearxNG
+    # "auto" — try DDG first (with retry), fail over to SearxNG
     results = _search_ddg(query, max_results)
     if results:
         return results
 
     logger.info("DDG returned 0 results — failing over to SearxNG for %r", query[:80])
-    return _search_searxng(query, max_results)
+    results = _search_searxng(query, max_results)
+    if results:
+        return results
+
+    # Both backends empty — retry DDG with fewer results
+    # (DDG sometimes rate-limits based on result count)
+    logger.info("Both backends empty — retrying DDG with reduced count for %r", query[:80])
+    return _search_ddg(query, max_results=min(max_results, 4))
 
 
 @lru_cache(maxsize=200)

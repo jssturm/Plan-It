@@ -99,6 +99,8 @@
       // Schedule Items
       "schedule.addStop": "\u2795 Add Stop",
       "schedule.downloadCalendar": "\uD83D\uDCC5 Download Calendar",
+      "schedule.print": "\uD83D\uDDBC Print",
+      "schedule.share": "\uD83D\uDD17 Share",
       "schedule.viewFull": "\uD83D\uDC41 View Full Detail",
       "schedule.planAnother": "\u2795 Plan Another Trip",
       "schedule.edit": "\u270E",
@@ -175,6 +177,7 @@
       "toast.scheduleAdded": "Schedule item added.",
       "toast.reminderSet": "Reminder set to {min} min",
       "toast.reminderRemoved": "Reminder removed",
+      "toast.linkCopied": "Link copied to clipboard!",
       "toast.reminderFiredMap": "\uD83D\uDD14 Reminder for {time} — map opened in new tab",
       "toast.reminderFired": "\uD83D\uDD14 Reminder for {time} — {action}",
 
@@ -297,6 +300,8 @@
       // Schedule Items
       "schedule.addStop": "\u2795 Añadir Parada",
       "schedule.downloadCalendar": "\uD83D\uDCC5 Descargar Calendario",
+      "schedule.print": "\uD83D\uDDBC Imprimir",
+      "schedule.share": "\uD83D\uDD17 Compartir",
       "schedule.viewFull": "\uD83D\uDC41 Ver Detalle Completo",
       "schedule.planAnother": "\u2795 Planificar Otro Viaje",
       "schedule.edit": "\u270E",
@@ -373,6 +378,7 @@
       "toast.scheduleAdded": "Elemento del horario añadido.",
       "toast.reminderSet": "Recordatorio configurado a {min} min",
       "toast.reminderRemoved": "Recordatorio eliminado",
+      "toast.linkCopied": "¡Enlace copiado al portapapeles!",
       "toast.reminderFiredMap": "\uD83D\uDD14 Recordatorio para {time} — mapa abierto en nueva pestaña",
       "toast.reminderFired": "\uD83D\uDD14 Recordatorio para {time} — {action}",
 
