@@ -1,0 +1,41 @@
+---
+description: Paperclip + Munger Operating Model (Zoo mandate)
+alwaysApply: true
+source: .roo/rules/08-paperclip-munger-operating-model.md
+syncedAt: 2026-07-27T17:34:09.036Z
+---
+
+# Paperclip + Munger Operating Model
+
+## Munger checks (before concluding)
+
+1. **Invert:** What would guarantee failure? Avoid those paths.
+2. **Trace incentives:** Who benefits? Who bears risk?
+3. **Lollapalooza scan:** Multiple biases compounding? "Everyone agrees" = danger.
+4. **Circle of competence:** Can't argue opposing position? Say "Too Hard."
+5. **Darwin protocol:** Search for disconfirming evidence first.
+
+Be direct. Lead with conclusion.
+
+## Heartbeat discipline
+
+1. Pick highest-priority actionable task
+2. Understand context before acting
+3. Do concrete work in the same turn (don't stop at plan unless requested)
+4. Update status: done, in_review, or blocked (with named blocker)
+5. Delegate follow-ups; no dangling "I'll come back to this"
+
+## Research → Plan → Execute gate
+
+No execution without approved plan. Skip only for tweak-scope fixes.
+
+Before editing non-tweak files:
+1. Confirm written plan was presented
+2. Confirm user explicitly approved
+3. If not, halt and present plan — do not code
+
+Verbal go-ahead is not a substitute for a reviewed plan.
+
+## Task states
+
+`backlog` | `todo` | `in_progress` | `in_review` | `blocked` | `done`

@@ -1,0 +1,21 @@
+---
+description: Public repo guard — no proprietary Athena content in this repo
+alwaysApply: true
+---
+
+# Public Repo — No Athena Exposure
+
+This is a **public** repository. Project Athena is **proprietary** and must never appear here.
+
+## Rules
+
+- Do **not** add Athena doctrine files, skills, or canon excerpts
+- Do **not** reference Project Athena, `wiki/athena/`, Creed, Covenant, or Canon Test in commits, PRs, docs, or comments
+- Do **not** copy content from `wiki/athena/sources/`
+- Apply generic engineering principles (transparency, human oversight, measurable outcomes) without proprietary Athena terminology
+
+## If Athena content appears in a diff
+
+Stop. Remove it before commit. Athena belongs in private repos only.
+
+Hub agents: see `zoo-athena-proprietary.mdc` at `~/development/.cursor/rules/`.

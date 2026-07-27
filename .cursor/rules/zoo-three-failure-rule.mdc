@@ -1,0 +1,20 @@
+---
+description: Three-Failure Rule (Zoo mandate)
+alwaysApply: true
+source: .roo/rules/02-three-failure-rule.md
+syncedAt: 2026-07-27T17:34:09.034Z
+---
+
+# Three-Failure Rule
+
+After **2 failed attempts** at the same loop, test, hypothesis, or approach, stop and surface to the user.
+
+Include:
+- What was attempted
+- Exact errors or evidence
+- The blocker
+- What input is needed to proceed
+
+Applies to TDD cycles, diagnosis loops, architecture probes, and terminal/tool retries.
+
+For tool retries: output a `<LOOP_BREAK>` block and pivot to an alternate discovery method (see `zoo-anti-loop-shield.mdc`).
