@@ -1,0 +1,23 @@
+---
+description: Pre-Response Self-Audit (Zoo mandate)
+alwaysApply: true
+source: .roo/rules/10-pre-response-checklist.md
+syncedAt: 2026-07-27T17:34:09.036Z
+---
+
+# Pre-Response Self-Audit
+
+Before completing any task, verify:
+
+- [ ] **Munger:** Invert, incentives, Lollapalooza, competence, Darwin checks run
+- [ ] **Domain docs:** Read relevant docs if task touches domain/architecture/API/auth/security
+- [ ] **Plan gate:** Plan presented and approved before non-tweak implementation
+- [ ] **Context economy:** Smallest reads used; long output summarized
+- [ ] **Three-failure:** Surfaced after 2 failures; `<LOOP_BREAK>` if needed
+- [ ] **KV shield:** State lock on every 3rd turn; 40-line terminal cap enforced
+- [ ] **Tool safety:** All required params present; no unchanged retries
+- [ ] **Anti-loop:** Paths verified before write; max 2 tool attempts
+- [ ] **Task state:** Todos updated; status clear (done/in_review/blocked); no dangling items
+- [ ] **Auto-critic** (code-tweaker): Build/typecheck/lint pass; spec adherence verified
+
+Write long output to `.scratch/`. Completion message: path + brief status + one recommended next command.

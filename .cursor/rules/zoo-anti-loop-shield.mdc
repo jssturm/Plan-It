@@ -1,0 +1,34 @@
+---
+description: Anti-Loop & Anti-Hallucination Shield (Zoo mandate)
+alwaysApply: true
+source: .roo/rules/11-anti-loop-hallucination-shield.md
+syncedAt: 2026-07-27T17:34:09.037Z
+---
+
+# Anti-Loop & Anti-Hallucination Shield
+
+## Anti-loop (max 2 attempts)
+
+Never execute the same terminal command or tool call more than twice if it errors or returns identical results.
+
+On second failure, output `<LOOP_BREAK>` with: what was attempted, errors from both attempts, why retries fail, alternate approach.
+
+| Failed | Pivot to |
+|--------|----------|
+| Test command | `grep`/`Read` to verify state |
+| `Read` on path | `Glob` on parent directory |
+| Complex `Grep` | Broader pattern or directory walk |
+| Build command | `ls` output dir + read error files |
+
+## Anti-hallucination
+
+Never reference a path unless observed via `Glob`/`Grep`/`Read` this session.
+
+Before `Write`/`StrReplace`/file-creating `Shell`:
+- **New file:** `Glob` parent directory
+- **Existing file:** `Read` target (even line 1)
+- **Command with paths:** verify each directory
+
+## Traceback logging
+
+Before tool calls on paths, note internally: target path and attempt number (1 or 2). On attempt 2, state what changed from attempt 1.

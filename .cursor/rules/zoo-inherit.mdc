@@ -1,0 +1,14 @@
+---
+description: Inherit Zoo Flow mandates from development hub (public repo — no proprietary content)
+alwaysApply: true
+---
+
+# Zoo Flow Inheritance
+
+This **public** repo inherits a sanitized Zoo bundle from the development hub.
+
+- Follow `.cursor/rules/zoo-inherit.mdc` and project-specific rules
+- **Never** add Project Athena doctrine, canon, or proprietary IP here
+- See `zoo-no-proprietary-exposure.mdc`
+
+Hub: `~/development/` — Athena mandate applies at hub/private repos only.

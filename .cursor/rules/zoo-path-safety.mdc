@@ -1,0 +1,22 @@
+---
+description: Path Safety (Zoo mandate)
+alwaysApply: true
+source: .roo/rules/00-paths.md
+syncedAt: 2026-07-27T17:34:09.031Z
+---
+
+# Path Safety
+
+All skill and command paths are workspace-root paths.
+
+**Valid forms:**
+- Skills: `.roo/skills/{bucket}/{skill}/SKILL.md`
+- Commands: `.roo/commands/{command}.md`
+
+**Rules:**
+- Load skills only from `.roo/skills/...`
+- Never resolve paths relative to `.roo/rules/` or command file location
+- Invalid: any skill path under `.roo/rules/`
+- Scratch output: `.scratch/{category}/{date}/{slug}/`
+
+Before any write/edit, verify the target path exists via `Glob` or `Read`. Never reference paths not observed in this session.
