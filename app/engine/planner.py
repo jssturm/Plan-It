@@ -1354,40 +1354,75 @@ def _fmt_time(hour: int, minute: int) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _to_24h(hour: int, meridiem: str | None) -> int | None:
+    """Convert hour + optional AM/PM to 24-hour clock, or None if invalid."""
+    if meridiem:
+        if hour < 1 or hour > 12:
+            return None
+        if meridiem == "AM" and hour == 12:
+            return 0
+        if meridiem == "PM" and hour != 12:
+            return hour + 12
+        return hour
+    # No meridiem: treat as 24-hour when hour >= 13, else leave as-is (AM-ish).
+    if hour < 0 or hour > 23:
+        return None
+    return hour
+
+
 def _normalize_departure_time(raw: str) -> str:
     """Normalize a user-entered departure time string to 'HH:MM AM/PM' format.
 
-    Accepts '7:00 AM', '07:00', '7am', '0700', '7:00AM', etc.
+    Accepts '7:00 AM', '07:00', '7am', '0700', '0800 AM', '7:00AM', bare
+    hour integers, and similar free-form variants.
     Returns the normalized time string or the raw input if unparseable.
     """
-    stripped = raw.strip().upper()
-    # Try "H:MM AM/PM" or "HH:MM AM/PM"
-    m = re.match(r'(\d{1,2}):(\d{2})\s*(AM|PM)?', stripped)
+    stripped = re.sub(r"[.\u00b7]", ":", raw.strip().upper())
+    stripped = re.sub(r"\s+", " ", stripped).strip()
+
+    def _finish(hour: int, minute: int, meridiem: str | None) -> str | None:
+        if minute < 0 or minute > 59:
+            return None
+        hour_24 = _to_24h(hour, meridiem)
+        if hour_24 is None:
+            return None
+        return _fmt_time(hour_24, minute)
+
+    # Try "H:MM AM/PM" or "HH:MM AM/PM" (optional colon variants already normalized)
+    m = re.match(r"^(\d{1,2}):(\d{2})\s*(AM|PM)?$", stripped)
     if m:
-        hour = int(m.group(1))
-        minute = int(m.group(2))
-        meridiem = m.group(3) or ('AM' if hour < 12 else 'PM')
-        # Convert to 24-hour for _fmt_time:
-        # - 12:xx AM → hour 0 (midnight)
-        # - 12:xx PM → hour 12 (noon, unchanged)
-        # - AM otherwise → hour unchanged
-        # - PM otherwise → hour + 12
-        if meridiem == 'AM' and hour == 12:
-            hour = 0
-        elif meridiem == 'PM' and hour != 12:
-            hour += 12
-        return _fmt_time(hour, minute)
-    # Try "7am", "7 AM", "07:00AM" etc without minutes
-    m = re.match(r'(\d{1,2})\s*(AM|PM)', stripped)
+        result = _finish(int(m.group(1)), int(m.group(2)), m.group(3))
+        if result:
+            return result
+
+    # Compact HHmm / Hmm with optional AM/PM: "0700", "800", "0800 AM", "0800AM"
+    m = re.match(r"^(\d{3,4})\s*(AM|PM)?$", stripped)
     if m:
-        hour = int(m.group(1))
+        digits = m.group(1)
         meridiem = m.group(2)
-        return _fmt_time(hour if meridiem == 'AM' or hour == 12 else hour + 12, 0)
-    # Try bare hour like "7", "14"
-    m = re.match(r'^(\d{1,2})$', stripped)
+        if len(digits) == 3:
+            hour, minute = int(digits[0]), int(digits[1:])
+        else:
+            hour, minute = int(digits[:2]), int(digits[2:])
+        # With AM/PM, hour must be 1–12; without, allow 00–23 military style.
+        result = _finish(hour, minute, meridiem)
+        if result:
+            return result
+
+    # Try "7am", "7 AM", "08AM" etc without minutes
+    m = re.match(r"^(\d{1,2})\s*(AM|PM)$", stripped)
     if m:
-        hour = int(m.group(1))
-        return _fmt_time(hour, 0)
+        result = _finish(int(m.group(1)), 0, m.group(2))
+        if result:
+            return result
+
+    # Try bare hour like "7", "14"
+    m = re.match(r"^(\d{1,2})$", stripped)
+    if m:
+        result = _finish(int(m.group(1)), 0, None)
+        if result:
+            return result
+
     # Return as-is; _parse_time will handle fallback
     return raw
 
