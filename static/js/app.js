@@ -754,8 +754,12 @@
           );
         }
         if (item.wait_time_min != null) {
+          var waitLabel = t("badge.wait", { min: item.wait_time_min });
+          if (item.wait_source === "live" || item.wait_source === "live_park_avg") {
+            waitLabel = t("badge.waitLive", { min: item.wait_time_min });
+          }
           metaBadges.push(
-            '<span class="badge badge-wait">' + t("badge.wait", { min: item.wait_time_min }) + '</span>'
+            '<span class="badge badge-wait">' + waitLabel + '</span>'
           );
         }
         if (item.reminder_min) {

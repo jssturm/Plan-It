@@ -160,6 +160,7 @@
       // Badges
       "badge.walk": "{min} min walk",
       "badge.wait": "{min} min wait",
+      "badge.waitLive": "{min} min wait (live)",
       "badge.reminder": "{min} min",
       "badge.priority.high": "high",
       "badge.priority.medium": "medium",
@@ -365,6 +366,7 @@
       // Badges
       "badge.walk": "{min} min caminata",
       "badge.wait": "{min} min espera",
+      "badge.waitLive": "{min} min espera (en vivo)",
       "badge.reminder": "{min} min",
       "badge.priority.high": "alta",
       "badge.priority.medium": "media",

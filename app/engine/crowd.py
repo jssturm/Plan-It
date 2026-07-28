@@ -13,40 +13,88 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.request
 from datetime import date
 from functools import lru_cache
 
 logger = logging.getLogger("plan-it.crowd")
 
-# Queue-Times park IDs (from https://queue-times.com/parks.json)
+# Queue-Times park IDs (from https://queue-times.com/parks.json) — multi-park coverage
 _PARK_IDS: dict[str, int] = {
+    # Walt Disney World
     "magic kingdom": 6,
     "disney magic kingdom": 6,
     "epcot": 5,
     "hollywood studios": 7,
     "disney hollywood studios": 7,
+    "hollywood": 7,
     "animal kingdom": 8,
+    "disney animal kingdom": 8,
+    # Disneyland Resort
     "disney california adventure": 17,
+    "california adventure": 17,
     "disneyland": 16,
+    # Universal
     "islands of adventure": 64,
+    "islands of adventure at universal orlando": 64,
     "universal studios florida": 65,
+    "universal studios at universal orlando": 65,
+    "universal studios orlando": 65,
     "universal studios hollywood": 66,
-    "universal studios": 65,
+    "epic universe": 334,
+    "volcano bay": 67,
+    "universal volcano bay": 67,
+    # SeaWorld / Busch
     "busch gardens tampa": 24,
-    "busch gardens williamsburg": 27,
-    "seaworld orlando": 25,
-    "sea world orlando": 25,
-    "cedar point": 58,
+    "busch gardens": 24,
+    "busch gardens williamsburg": 23,
+    "seaworld orlando": 21,
+    "sea world orlando": 21,
+    "seaworld san diego": 20,
+    "sea world san diego": 20,
+    "seaworld san antonio": 22,
+    "aquatica orlando": 94,
+    "adventure island": 97,
+    "sesame place": 29,
+    # Six Flags
     "six flags great adventure": 37,
+    "six flags magic mountain": 32,
+    "six flags over georgia": 35,
+    "six flags over texas": 34,
+    "six flags great america": 38,
+    "six flags discovery kingdom": 33,
+    "six flags fiesta texas": 39,
+    "six flags new england": 43,
+    "six flags st. louis": 36,
+    "six flags america": 42,
+    # Cedar Fair / others
+    "cedar point": 50,
+    "knott's berry farm": 61,
+    "knotts berry farm": 61,
+    "kings island": 60,
+    "kings dominion": 62,
+    "carowinds": 59,
+    "california's great america": 57,
+    "hersheypark": 15,
+    "hershey park": 15,
+    "dollywood": 55,
+    "silver dollar city": 10,
+    "legoland florida": 280,
+    "legoland california": 279,
+    "legoland new york": 299,
+    "kennywood": 312,
 }
 
-# Resort / umbrella names → component park IDs (averaged)
+# Resort / umbrella names → component park IDs (averaged for crowd; searched for waits)
 _RESORT_PARKS: dict[str, list[int]] = {
     "walt disney world": [6, 5, 7, 8],
     "disney world": [6, 5, 7, 8],
     "wdw": [6, 5, 7, 8],
-    "universal orlando": [65, 64],
+    "disneyland resort": [16, 17],
+    "universal orlando": [65, 64, 334, 67],
+    "universal orlando resort": [65, 64, 334, 67],
+    "seaworld orlando resort": [21, 94],
 }
 
 
@@ -127,6 +175,163 @@ def is_holiday_period(target_date: date | None = None) -> bool:
     return _holiday_adjustment(target_date) > 0
 
 
+def estimate_attraction_wait(
+    attraction: str,
+    venue_name: str = "",
+    *,
+    target_date: date | None = None,
+) -> dict[str, object] | None:
+    """Return live wait info for an attraction string, or None if unavailable.
+
+    Handles free-form planner strings such as:
+      - ``Space Mountain``
+      - ``Magic Kingdom: Space Mountain, Seven Dwarfs Mine Train``
+      - ``Guardians of the Galaxy: Cosmic Rewind``
+
+    Returns dict with:
+      wait_min (int), matched (list[str]), park_ids (list[int]), source ("live")
+    """
+    if target_date is None:
+        target_date = date.today()
+    if target_date != date.today():
+        return None
+
+    park_hint, ride_names = _parse_attraction_label(attraction)
+    park_ids = _resolve_park_ids(park_hint) if park_hint else []
+    if not park_ids:
+        park_ids = _resolve_park_ids(venue_name)
+    if not park_ids:
+        # Last resort: scan all known single-park aliases mentioned in the text
+        blob = f"{attraction} {venue_name}".lower()
+        for key, pid in sorted(_PARK_IDS.items(), key=lambda kv: -len(kv[0])):
+            if key in blob and pid not in park_ids:
+                park_ids.append(pid)
+
+    if not park_ids:
+        return None
+
+    # Build ride catalog across candidate parks
+    catalog: list[tuple[int, str, float]] = []  # park_id, name, wait
+    for pid in park_ids:
+        for name, wait in _fetch_park_ride_waits(pid):
+            catalog.append((pid, name, wait))
+
+    if not catalog:
+        return None
+
+    matched_waits: list[float] = []
+    matched_names: list[str] = []
+    for query in ride_names or [attraction]:
+        hit = _match_ride(query, catalog)
+        if hit:
+            _pid, name, wait = hit
+            matched_waits.append(wait)
+            matched_names.append(name)
+
+    if matched_waits:
+        # Use the highest matched wait so the schedule plans for the worst line
+        wait_min = int(round(max(matched_waits)))
+        return {
+            "wait_min": wait_min,
+            "matched": matched_names,
+            "park_ids": park_ids,
+            "source": "live",
+        }
+
+    # No ride-level match — fall back to park average across open rides
+    all_waits = [w for _pid, _n, w in catalog]
+    if not all_waits:
+        return None
+    avg = sum(all_waits) / len(all_waits)
+    return {
+        "wait_min": int(round(avg)),
+        "matched": [],
+        "park_ids": park_ids,
+        "source": "live_park_avg",
+    }
+
+
+def _parse_attraction_label(attraction: str) -> tuple[str, list[str]]:
+    """Split ``Park: Ride A, Ride B`` into (park_hint, [rides])."""
+    text = (attraction or "").split(" — ")[0].strip()
+    if not text:
+        return "", []
+
+    park_hint = ""
+    rides_part = text
+
+    # "Magic Kingdom: Space Mountain, Seven Dwarfs Mine Train"
+    if ":" in text:
+        left, right = text.split(":", 1)
+        # Only treat left as park if it looks like a park/resort name
+        if _resolve_park_ids(left) or any(k in left.lower() for k in _PARK_IDS) or any(
+            k in left.lower() for k in _RESORT_PARKS
+        ):
+            park_hint = left.strip()
+            rides_part = right.strip()
+        else:
+            # e.g. "Guardians of the Galaxy: Cosmic Rewind" — whole string is the ride
+            return "", [text]
+
+    # Split ride list on commas / "and"
+    parts = re.split(r"\s*,\s*|\s+and\s+", rides_part, flags=re.IGNORECASE)
+    rides = [p.strip() for p in parts if p.strip()]
+    return park_hint, rides
+
+
+def _normalize_ride_key(name: str) -> str:
+    """Lowercase alphanumeric key for fuzzy ride matching."""
+    return re.sub(r"[^a-z0-9]+", "", (name or "").lower())
+
+
+def _match_ride(
+    query: str, catalog: list[tuple[int, str, float]]
+) -> tuple[int, str, float] | None:
+    """Best fuzzy match of *query* against live ride catalog."""
+    q = _normalize_ride_key(query)
+    if not q or len(q) < 3:
+        return None
+
+    # Exact normalized match
+    for pid, name, wait in catalog:
+        if _normalize_ride_key(name) == q:
+            return pid, name, wait
+
+    # Substring either direction (prefer longest catalog name that contains query)
+    candidates: list[tuple[int, int, str, float]] = []
+    for pid, name, wait in catalog:
+        key = _normalize_ride_key(name)
+        if q in key or key in q:
+            # Prefer standard queues over Single Rider / Virtual variants
+            penalty = 0
+            lower = name.lower()
+            if "single rider" in lower:
+                penalty = 50
+            elif "virtual" in lower or "lightning" in lower:
+                penalty = 20
+            candidates.append((len(key) - penalty, pid, name, wait))
+    if candidates:
+        candidates.sort(reverse=True)
+        _n, pid, name, wait = candidates[0]
+        return pid, name, wait
+
+    # Token overlap: require most significant tokens
+    q_tokens = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if len(t) > 2]
+    if len(q_tokens) >= 2:
+        best = None
+        best_score = 0
+        for pid, name, wait in catalog:
+            name_l = name.lower()
+            score = sum(1 for t in q_tokens if t in name_l)
+            if score >= max(2, len(q_tokens) - 1) and score > best_score:
+                best = (pid, name, wait)
+                best_score = score
+        if best:
+            return best
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Live data (Queue-Times.com)
 # ---------------------------------------------------------------------------
@@ -198,8 +403,8 @@ def _crowd_from_avg_wait(avg_wait: float) -> int:
 
 
 @lru_cache(maxsize=64)
-def _fetch_open_wait_times(park_id: int) -> tuple[float, ...]:
-    """Fetch open-ride wait times for a park. Cached briefly via process LRU."""
+def _fetch_park_ride_waits(park_id: int) -> tuple[tuple[str, float], ...]:
+    """Fetch (ride_name, wait_min) for open rides at a park."""
     url = f"https://queue-times.com/parks/{park_id}/queue_times.json"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Plan-It/0.3 (crowd)"})
@@ -209,15 +414,20 @@ def _fetch_open_wait_times(park_id: int) -> tuple[float, ...]:
         logger.warning("Queue-Times fetch failed for park %s: %s", park_id, exc)
         return tuple()
 
-    waits: list[float] = []
+    rides: list[tuple[str, float]] = []
     for land in data.get("lands") or []:
         for ride in land.get("rides") or []:
             if ride.get("is_open"):
-                waits.append(float(ride.get("wait_time") or 0))
+                rides.append((str(ride.get("name") or ""), float(ride.get("wait_time") or 0)))
     for ride in data.get("rides") or []:
         if ride.get("is_open"):
-            waits.append(float(ride.get("wait_time") or 0))
-    return tuple(waits)
+            rides.append((str(ride.get("name") or ""), float(ride.get("wait_time") or 0)))
+    return tuple((n, w) for n, w in rides if n)
+
+
+def _fetch_open_wait_times(park_id: int) -> tuple[float, ...]:
+    """Open-ride wait minutes for a park (used by crowd-level averaging)."""
+    return tuple(w for _name, w in _fetch_park_ride_waits(park_id))
 
 
 # ---------------------------------------------------------------------------

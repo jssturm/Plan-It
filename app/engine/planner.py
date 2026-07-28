@@ -78,7 +78,7 @@ def build_travel_plan(
 
     # 6. Build the schedule
     schedule = _build_schedule(intent, venue, route, is_multiday, starting_location,
-                               departure_time=final_departure)
+                               departure_time=final_departure, trip_date=trip_date)
 
     # 7. Research restaurants — include location for accurate results
     venue_area = f"near {intent['venue']}"
@@ -960,6 +960,7 @@ def _build_schedule(
     is_multiday: bool = False,
     starting_location: str | None = None,
     departure_time: str | None = None,
+    trip_date: date | None = None,
 ) -> list[dict]:
     """Build a full day schedule with support for multi-day trips.
 
@@ -1054,8 +1055,15 @@ def _build_schedule(
             break
 
         walk = random.randint(3, 12) if i > 0 else 0
-        # Wait times ramp up as the day progresses
-        if current_h < 10:
+        # Prefer live Queue-Times waits; fall back to time-of-day heuristic
+        live = crowd.estimate_attraction_wait(
+            attraction, intent.get("venue", ""), target_date=trip_date
+        )
+        wait_source = "estimate"
+        if live and isinstance(live.get("wait_min"), (int, float)):
+            wait = max(0, int(live["wait_min"]))
+            wait_source = str(live.get("source") or "live")
+        elif current_h < 10:
             wait = random.randint(5, 15)
         elif current_h < 12:
             wait = random.randint(10, 25)
@@ -1092,6 +1100,7 @@ def _build_schedule(
             "priority": priority,
             "walking_time_min": walk,
             "wait_time_min": wait,
+            "wait_source": wait_source,
             "restaurant": "Restaurant recommendation TBD" if is_lunch_slot else None,
             "meal_timing_note": "Beat the lunch crowd — dine early or after 1 PM" if is_lunch_slot else None,
             "reminder_min": None,
