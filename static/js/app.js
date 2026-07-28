@@ -161,6 +161,9 @@
           saveFiredReminders();
 
           var mapUrl = item.walking_map_url;
+          if (!mapUrl && item.map_destination) {
+            mapUrl = buildWalkingMapsUrl(null, item.map_destination);
+          }
           if (!mapUrl) {
             // Fall back to the route maps_url if available
             var routeIdx = findRouteIndexForSchedule(plan, idx);
