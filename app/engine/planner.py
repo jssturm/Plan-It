@@ -109,10 +109,13 @@ def build_travel_plan(
     # 8. Inject restaurant recommendations into schedule items
     schedule = _inject_restaurants(schedule, restaurants, restaurant_preferences)
 
-    # 8a. Crowd prediction — venue-specific crowd level and tips
+    # 8a. Crowd prediction — prefer live wait data; fall back to estimate
     crowd_level = 5  # default: average
+    crowd_source = "estimate"
     try:
-        crowd_level = crowd.get_crowd_level(intent["venue"])
+        crowd_level, crowd_source = crowd.get_crowd_level_with_source(
+            intent["venue"], target_date=trip_date
+        )
         crowd_tips = crowd.get_crowd_tips(intent["venue"], crowd_level)
         if crowd_tips:
             strategy = list(crowd_tips) + strategy
@@ -212,18 +215,20 @@ def build_travel_plan(
         "hotels": hotels,
         "trip_date": trip_date.isoformat() if trip_date else "",
         "crowd_level": crowd_level,
+        "crowd_source": crowd_source,
         "total_walking_min": total_walking or None,
         "total_wait_min": total_wait or None,
     }
 
     logger.info(
-        "Plan built: %s, %d route legs, %d schedule items, type=%s, multiday=%s, crowd=%d",
+        "Plan built: %s, %d route legs, %d schedule items, type=%s, multiday=%s, crowd=%d (%s)",
         intent["venue"][:40],
         len(route),
         len(schedule),
         venue.get("venue_type"),
         is_multiday,
         crowd_level,
+        crowd_source,
     )
     return plan
 

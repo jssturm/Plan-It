@@ -701,9 +701,14 @@
     else if (level >= 6) { label = t("crowd.busy"); colorClass = "crowd-med"; }
     else if (level >= 4) { label = t("crowd.moderate"); colorClass = "crowd-low"; }
     else { label = t("crowd.light"); colorClass = "crowd-low"; }
+    var source = plan.crowd_source === "live" ? t("crowd.liveSource") : t("crowd.estimateSource");
+    var heading = plan.crowd_source === "live"
+      ? t("crowd.liveCrowd", { level: level })
+      : t("crowd.estimatedCrowd", { level: level });
     return '<div class="crowd-banner ' + colorClass + '">'
       + '<span class="crowd-banner-icon">&#128205;</span>'
-      + '<span>' + t("crowd.predictedCrowd", { level: level }) + ' — ' + label + '</span>'
+      + '<span>' + heading + ' — ' + label
+      + ' <span class="crowd-source">(' + source + ')</span></span>'
       + '</div>';
   }
 
