@@ -124,7 +124,7 @@
               <label class="form-label" for="trip-departure" data-i18n="newTrip.departureTime">Departure Time</label>
               <div class="time-input-group">
                 <input id="trip-departure-hh" class="form-input time-input-hh" type="text"
-                  placeholder="07" maxlength="2" autocomplete="off" />
+                  placeholder="07" maxlength="4" autocomplete="off" />
                 <span class="time-colon">:</span>
                 <input id="trip-departure-mm" class="form-input time-input-mm" type="text"
                   placeholder="00" maxlength="2" autocomplete="off" />
@@ -133,14 +133,14 @@
                   <button type="button" class="ampm-btn" data-period="PM">PM</button>
                 </div>
               </div>
-              <div class="form-hint" data-i18n="newTrip.departureHint">When you plan to leave. Enter the time and select AM or PM.</div>
+              <div class="form-hint" data-i18n="newTrip.departureHint">When you plan to leave. Enter a time like 8:00, 0800, or 8am, and select AM or PM.</div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="trip-start" data-i18n="newTrip.startingLocation">Starting Location (Street Address, City, State, Zip Code)</label>
+              <label class="form-label" for="trip-start" data-i18n="newTrip.startingLocation">Starting Location</label>
               <input id="trip-start" class="form-input" type="text"
                 data-i18n-placeholder="newTrip.startPlaceholder"
-                placeholder="e.g. 9801 International Dr, Orlando, Florida 32819" />
-              <div class="form-hint" data-i18n="newTrip.startHint">Required if provided — must include street address, city, state, and zip code, separated by commas.</div>
+                placeholder="e.g. 9801 International Dr Orlando FL 32819" />
+              <div class="form-hint" data-i18n="newTrip.startHint">Optional — free-form is fine (commas optional). e.g. 9801 International Dr Orlando FL 32819</div>
             </div>
           </div>
           <div class="form-group">

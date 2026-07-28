@@ -108,10 +108,19 @@ class ScheduleItem(BaseModel):
     @field_validator("time")
     @classmethod
     def time_must_look_like_clock(cls, v: str) -> str:
-        """Lightweight check that the time string is plausible."""
-        if len(v) < 5:
-            raise ValueError(f"time must be at least 5 characters (e.g. '07:30 AM'), got: {v}")
-        return v
+        """Normalize free-form times; reject only if unparseable."""
+        import re
+
+        from app.engine.timeparse import normalize_time
+
+        if not v or not str(v).strip():
+            raise ValueError("time must not be empty")
+        normalized = normalize_time(v.strip())
+        if not re.match(r"^\d{1,2}:\d{2}\s*(AM|PM)", normalized, re.IGNORECASE):
+            raise ValueError(
+                f"time could not be parsed (e.g. '07:30 AM', '0800', '8am'), got: {v}"
+            )
+        return normalized
 
 
 class RentalCar(BaseModel):
@@ -220,5 +229,14 @@ class TravelPlan(BaseModel):
     @field_validator("departure_time")
     @classmethod
     def departure_time_strip(cls, v: str) -> str:
-        """Strip whitespace from departure_time."""
-        return v.strip() if v else v
+        """Strip and normalize departure_time when present."""
+        import re
+
+        from app.engine.timeparse import normalize_time
+
+        if not v:
+            return v
+        normalized = normalize_time(v.strip())
+        if re.match(r"^\d{1,2}:\d{2}\s*(AM|PM)", normalized, re.IGNORECASE):
+            return normalized
+        return v.strip()

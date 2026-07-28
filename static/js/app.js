@@ -181,13 +181,12 @@
   }
 
   function parseTimeString(timeStr) {
-    var match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (!match) return null;
-    var hours = parseInt(match[1], 10);
-    var mins = parseInt(match[2], 10);
-    var period = match[3].toUpperCase();
-    if (period === "PM" && hours < 12) hours += 12;
-    if (period === "AM" && hours === 12) hours = 0;
+    var parsed = parseFlexibleTimeString(timeStr, "AM");
+    if (!parsed) return null;
+    var hours = parseInt(parsed.hh, 10);
+    var mins = parseInt(parsed.mm, 10);
+    if (parsed.period === "PM" && hours < 12) hours += 12;
+    if (parsed.period === "AM" && hours === 12) hours = 0;
     return hours * 60 + mins;
   }
 
@@ -412,10 +411,12 @@
       return;
     }
 
-    const start = $tripStart.value.trim();
-    // Address validation removed — Nominatim handles free-form geocoding
-    // for any reasonable input (city names, addresses, landmarks, etc.)
-
+    const startRaw = $tripStart.value.trim();
+    // Soft-normalize free-form US addresses (commas optional) without blocking.
+    const start = startRaw ? normalizeUSAddress(startRaw) : "";
+    if (start && start !== startRaw && $tripStart) {
+      $tripStart.value = start;
+    }
     // Check for city names without a state — duplicate cities exist
     // (e.g. Jacksonville FL/TX/NC, Portland OR/ME, Springfield IL/MO/MA)
     const cityErr = validateCityState(input);
@@ -435,16 +436,25 @@
       const departurePeriod = getSelectedPeriod();
       var departure = "";
       if (hh || mm) {
-        // Validate time before constructing the departure string
-        var timeErr = validateTimeInput(hh, mm);
-        if (timeErr) {
-          showToast(timeErr, "error");
+        // Extract a valid time from whatever the user typed (08 + blank,
+        // compact 0800, 8am, etc.) instead of hard-failing into a toast loop.
+        var parsedDep = parseFlexibleDeparture(hh, mm, departurePeriod);
+        if (!parsedDep) {
+          showToast(t("error.validTime"), "error");
           $btnGenerate.disabled = false;
           $btnGenerate.innerHTML = "&#128640; Generate Itinerary";
           return;
         }
-        departure = (hh || "00") + ":" + (mm || "00");
-        if (departurePeriod) departure = departure + " " + departurePeriod;
+        // Reflect the normalized values back into the fields
+        if ($tripDepartureHh) $tripDepartureHh.value = parsedDep.hh;
+        if ($tripDepartureMm) $tripDepartureMm.value = parsedDep.mm;
+        if ($tripDepartureAmpm) {
+          var buttons = $tripDepartureAmpm.querySelectorAll(".ampm-btn");
+          buttons.forEach(function (b) {
+            b.classList.toggle("active", b.dataset.period === parsedDep.period);
+          });
+        }
+        departure = parsedDep.hh + ":" + parsedDep.mm + " " + parsedDep.period;
       }
       const restaurants = $tripRestaurants.value.trim();
       if (start) payload.starting_location = start;
@@ -1079,7 +1089,7 @@
             <div class="form-group">
               <label class="form-label">${f.label}</label>
               <div class="time-input-group">
-                <input class="form-input time-input-hhmm edit-field" type="text" data-field="${f.key}" value="${escapeHtml(hhmm)}" maxlength="5" placeholder="07:00" />
+                <input class="form-input time-input-hhmm edit-field" type="text" data-field="${f.key}" value="${escapeHtml(hhmm)}" maxlength="12" placeholder="07:00" />
                 <div class="ampm-toggle modal-ampm" data-time-field="${f.key}">
                   <button type="button" class="ampm-btn${amActive}" data-period="AM">AM</button>
                   <button type="button" class="ampm-btn${pmActive}" data-period="PM">PM</button>
@@ -1107,21 +1117,20 @@
           updates[key] = val;
         });
 
-        // Validate time if it was edited
+        // Normalize free-form time (0800, 8:00, 8am, etc.) then reassemble with AM/PM
         if (updates.time) {
-          var editTimeErr = validateTimeString(updates.time);
-          if (editTimeErr) {
-            showToast(editTimeErr, "error");
+          var modalAmpmEdit = $modalContainer.querySelector(".modal-ampm");
+          var editPeriod = "AM";
+          if (modalAmpmEdit) {
+            var editActive = modalAmpmEdit.querySelector(".ampm-btn.active");
+            editPeriod = editActive ? editActive.dataset.period : "AM";
+          }
+          var parsedEdit = parseFlexibleTimeString(updates.time, editPeriod);
+          if (!parsedEdit) {
+            showToast(t("error.validTime"), "error");
             return;
           }
-        }
-
-        // Reassemble time from HH:MM input + AM/PM toggle in modal
-        var modalAmpm = $modalContainer.querySelector(".modal-ampm");
-        if (modalAmpm && updates.time) {
-          var activeBtn = modalAmpm.querySelector(".ampm-btn.active");
-          var period = activeBtn ? activeBtn.dataset.period : "AM";
-          updates.time = updates.time + " " + period;
+          updates.time = parsedEdit.hh + ":" + parsedEdit.mm + " " + parsedEdit.period;
         }
 
         try {
@@ -1163,7 +1172,7 @@
       <div class="form-group">
         <label class="form-label">Time (HH:MM AM/PM)</label>
         <div class="time-input-group">
-          <input class="form-input time-input-hhmm" id="add-time" type="text" maxlength="5" placeholder="07:00" />
+          <input class="form-input time-input-hhmm" id="add-time" type="text" maxlength="12" placeholder="07:00" />
           <div class="ampm-toggle modal-ampm-add">
             <button type="button" class="ampm-btn active" data-period="AM">AM</button>
             <button type="button" class="ampm-btn" data-period="PM">PM</button>
@@ -1218,16 +1227,28 @@
       </div>
       `,
       async () => {
-        var addTime = document.getElementById("add-time").value.trim();
-        var addAmpm = $modalContainer.querySelector(".modal-ampm-add");
-        if (addAmpm && addTime) {
-          var activeBtn = addAmpm.querySelector(".ampm-btn.active");
-          var period = activeBtn ? activeBtn.dataset.period : "AM";
-          addTime = addTime + " " + period;
+        var addTimeRaw = document.getElementById("add-time").value.trim();
+        var addAction = document.getElementById("add-action").value.trim();
+        if (!addTimeRaw || !addAction) {
+          showToast(t("error.timeRequired"), "error");
+          return;
         }
+
+        var addAmpmEl = $modalContainer.querySelector(".modal-ampm-add");
+        var addPeriod = "AM";
+        if (addAmpmEl) {
+          var addActive = addAmpmEl.querySelector(".ampm-btn.active");
+          addPeriod = addActive ? addActive.dataset.period : "AM";
+        }
+        var parsedAdd = parseFlexibleTimeString(addTimeRaw, addPeriod);
+        if (!parsedAdd) {
+          showToast(t("error.validTime"), "error");
+          return;
+        }
+
         const scheduleItem = {
-          time: addTime,
-          action: document.getElementById("add-action").value.trim(),
+          time: parsedAdd.hh + ":" + parsedAdd.mm + " " + parsedAdd.period,
+          action: addAction,
           priority: document.getElementById("add-priority").value,
           walking_time_min: parseOrNull(document.getElementById("add-walk").value),
           wait_time_min: parseOrNull(document.getElementById("add-wait").value),
@@ -1235,18 +1256,6 @@
           restaurant: document.getElementById("add-restaurant").value.trim() || null,
           backup_plan: document.getElementById("add-backup").value.trim() || null,
         };
-
-        if (!scheduleItem.time || !scheduleItem.action) {
-          showToast(t("error.timeRequired"), "error");
-          return;
-        }
-
-        // Validate the time format (HH:MM, 1-12 hours, 0-59 minutes)
-        var timeStrErr = validateTimeString(addTime);
-        if (timeStrErr) {
-          showToast(timeStrErr, "error");
-          return;
-        }
 
         const position = Array.isArray(plan.schedule) ? plan.schedule.length : 0;
 
@@ -1343,14 +1352,50 @@
           if (firstBtn) firstBtn.focus();
         }
       });
-      // Allow only digits in time fields
+      // Allow digits in time fields; if a compact HHmm is typed/pasted into hours,
+      // split it across HH + MM so "0800" becomes 08:00 instead of erroring.
       [$tripDepartureHh, $tripDepartureMm].forEach(function (el) {
         el.addEventListener("input", function () {
           el.value = el.value.replace(/[^0-9]/g, "");
+          if (el === $tripDepartureHh && el.value.length >= 3) {
+            var compact = parseFlexibleTimeString(el.value, getSelectedPeriod());
+            if (compact) {
+              $tripDepartureHh.value = compact.hh;
+              $tripDepartureMm.value = compact.mm;
+              if ($tripDepartureAmpm) {
+                $tripDepartureAmpm.querySelectorAll(".ampm-btn").forEach(function (b) {
+                  b.classList.toggle("active", b.dataset.period === compact.period);
+                });
+              }
+              $tripDepartureMm.focus();
+            }
+          }
         });
       });
-      // Clamp hours to 1-12 and minutes to 0-59 on blur
+      $tripDepartureHh.addEventListener("paste", function (e) {
+        var text = (e.clipboardData || window.clipboardData).getData("text") || "";
+        var parsed = parseFlexibleTimeString(text.trim(), getSelectedPeriod());
+        if (parsed) {
+          e.preventDefault();
+          $tripDepartureHh.value = parsed.hh;
+          $tripDepartureMm.value = parsed.mm;
+          if ($tripDepartureAmpm) {
+            $tripDepartureAmpm.querySelectorAll(".ampm-btn").forEach(function (b) {
+              b.classList.toggle("active", b.dataset.period === parsed.period);
+            });
+          }
+        }
+      });
+      // Clamp hours to 1-12 and minutes to 0-59 on blur (after compact split)
       $tripDepartureHh.addEventListener("blur", function () {
+        if ($tripDepartureHh.value.length >= 3) {
+          var compactBlur = parseFlexibleTimeString($tripDepartureHh.value, getSelectedPeriod());
+          if (compactBlur) {
+            $tripDepartureHh.value = compactBlur.hh;
+            if (!$tripDepartureMm.value) $tripDepartureMm.value = compactBlur.mm;
+            return;
+          }
+        }
         var v = parseInt($tripDepartureHh.value, 10);
         if ($tripDepartureHh.value !== "" && (isNaN(v) || v < 1)) $tripDepartureHh.value = "1";
         else if (v > 12) $tripDepartureHh.value = "12";
@@ -1765,66 +1810,211 @@
   }
 
   /* ------------------------------------------------------------------------
-     Address Validation
+     Address Normalization (graceful — never blocks submit)
      ------------------------------------------------------------------------ */
+
+  var _US_STATE_NAMES = {
+    alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
+    colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA",
+    hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA",
+    kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD",
+    massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS",
+    missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK",
+    oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC",
+    "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT",
+    virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI",
+    wyoming: "WY", "district of columbia": "DC", "washington dc": "DC", dc: "DC"
+  };
+
+  /**
+   * Soft-normalize a free-form US address into "street, city, ST ZIP" when
+   * components can be inferred. Never rejects — returns original trim on failure.
+   */
+  function normalizeUSAddress(raw) {
+    if (!raw || !String(raw).trim()) return raw;
+    var text = String(raw).trim().replace(/;/g, ",").replace(/\s+/g, " ");
+    var zip = "";
+    var zipMatch = text.match(/\b(\d{5}(?:-\d{4})?)\b/);
+    if (zipMatch) {
+      zip = zipMatch[1];
+      text = (text.slice(0, zipMatch.index) + " " + text.slice(zipMatch.index + zipMatch[0].length))
+        .trim().replace(/^,|,$/g, "").trim();
+    }
+
+    var state = "";
+    var lower = text.toLowerCase();
+    var bestLen = 0;
+    Object.keys(_US_STATE_NAMES).forEach(function (name) {
+      var re = new RegExp("\\b" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+      if (re.test(lower) && name.length > bestLen) {
+        bestLen = name.length;
+        state = _US_STATE_NAMES[name];
+      }
+    });
+    if (state && bestLen > 2) {
+      var matchedName = Object.keys(_US_STATE_NAMES).filter(function (n) {
+        return _US_STATE_NAMES[n] === state && n.length === bestLen;
+      })[0];
+      var nameRe = new RegExp("\\b" + matchedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+      text = text.replace(nameRe, " ").replace(/\s{2,}/g, " ").trim().replace(/^,|,$/g, "").trim();
+    } else {
+      var codeMatch = text.match(_stateCodePattern);
+      if (codeMatch) {
+        state = codeMatch[1].toUpperCase();
+        text = text.replace(new RegExp("\\b" + codeMatch[1] + "\\b", "i"), " ")
+          .replace(/\s{2,}/g, " ").trim().replace(/^,|,$/g, "").trim();
+      }
+    }
+
+    if (!state && !zip) return String(raw).trim();
+
+    var street = "";
+    var city = "";
+    if (text.indexOf(",") !== -1) {
+      var parts = text.split(",").map(function (p) { return p.trim(); }).filter(Boolean);
+      if (parts.length >= 2 && /\d/.test(parts[0])) {
+        street = parts[0];
+        city = parts[parts.length - 1];
+      } else if (parts.length >= 1) {
+        city = parts[parts.length - 1];
+      }
+    } else {
+      var streetCity = text.match(new RegExp(
+        "^(\\d+\\s+.{1,80}?\\b(?:street|st|avenue|ave|boulevard|blvd|road|rd|drive|dr|lane|ln|court|ct|circle|cir|way|place|pl|parkway|pkwy|highway|hwy)\\.?)\\s+(.+)$",
+        "i"
+      ));
+      if (streetCity) {
+        street = streetCity[1].trim();
+        city = streetCity[2].trim();
+      } else if (/^\d/.test(text)) {
+        var tokens = text.split(/\s+/);
+        if (tokens.length >= 3) {
+          street = tokens.slice(0, -1).join(" ");
+          city = tokens[tokens.length - 1];
+        } else {
+          city = text;
+        }
+      } else {
+        city = text;
+      }
+    }
+
+    var chunks = [];
+    if (street) chunks.push(street);
+    var cityState = [city, state].filter(Boolean).join(" ").trim();
+    if (zip) cityState = cityState ? cityState + " " + zip : zip;
+    if (cityState) chunks.push(cityState);
+    return chunks.length ? chunks.join(", ") : String(raw).trim();
+  }
+
+  /** @deprecated Kept for compatibility; always returns null (non-blocking). */
   function validateAddress(addr) {
-    if (!addr) return null; // empty is fine (field is optional)
-
-    // Must contain a street number (digits at start or after a comma)
-    var hasStreet = /\d+\s+\w+/i.test(addr);
-    // Must contain a city-like component followed by comma/space and
-    // either a US state abbreviation OR a spelled-out state name
-    var hasCityState = /[a-z]+(?:,\s*|\s+)(A[LKZR]|C[AOT]|D[EC]|F[LM]|G[AU]|HI|I[DLNA]|K[SY]|LA|M[ADEHINOPST]|N[CDEHJMVY]|O[HKR]|P[AWR]|RI|S[CD]|T[NX]|UT|V[AIT]|W[AIVY])\b/i.test(addr) || _fullStatePattern.test(addr);
-    // Must contain a 5-digit ZIP code (optionally with +4)
-    var hasZip = /\b\d{5}(?:-\d{4})?\b/.test(addr);
-
-    var missing = [];
-    if (!hasStreet) missing.push("street address");
-    if (!hasCityState) missing.push("city and state");
-    if (!hasZip) missing.push("zip code");
-
-    if (missing.length === 0) return null;
-
-    if (missing.length === 3) {
-      return t("error.missingFullAddress");
-    }
-
-    // Single missing field — give a specific hint
-    if (missing.length === 1) {
-      if (missing[0] === "street address") {
-        return t("error.missingStreet");
-      }
-      if (missing[0] === "city and state") {
-        return t("error.missingCityState");
-      }
-      if (missing[0] === "zip code") {
-        return t("error.missingZip");
-      }
-    }
-
-    // Two missing fields
-    if (missing[0] === "city and state" || missing[1] === "city and state") {
-      return t("error.missingCityState2");
-    }
-    return t("error.missingGeneric");
+    return null;
   }
 
   /* ------------------------------------------------------------------------
-     Time Validation
+     Time Validation / Flexible Parsing
      ------------------------------------------------------------------------ */
+
+  /**
+   * Parse a free-form time string into { hh, mm, period }.
+   * Accepts: 7:00 AM, 07:00, 7am, 0700, 0800 AM, 8, etc.
+   * @param {string} timeStr
+   * @param {string} [defaultPeriod="AM"] used when input has no AM/PM and hour ≤ 12
+   * @returns {{hh: string, mm: string, period: string}|null}
+   */
+  function parseFlexibleTimeString(timeStr, defaultPeriod) {
+    if (!timeStr || !String(timeStr).trim()) return null;
+    var stripped = String(timeStr).trim().toUpperCase().replace(/[.\u00b7]/g, ":");
+    stripped = stripped.replace(/\s+/g, " ").trim();
+    var periodDefault = defaultPeriod === "PM" ? "PM" : "AM";
+
+    function finish(hour, minute, meridiem) {
+      if (isNaN(hour) || isNaN(minute) || minute < 0 || minute > 59) return null;
+      var period = meridiem || null;
+      if (period) {
+        if (hour < 1 || hour > 12) return null;
+      } else if (hour >= 0 && hour <= 23) {
+        // Military / 24-hour style without AM/PM
+        if (hour === 0) {
+          hour = 12;
+          period = "AM";
+        } else if (hour === 12) {
+          period = "PM";
+        } else if (hour > 12) {
+          hour = hour - 12;
+          period = "PM";
+        } else {
+          period = periodDefault;
+        }
+      } else {
+        return null;
+      }
+      return {
+        hh: String(hour).padStart(2, "0"),
+        mm: String(minute).padStart(2, "0"),
+        period: period,
+      };
+    }
+
+    var m = stripped.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+    if (m) return finish(parseInt(m[1], 10), parseInt(m[2], 10), m[3] || null);
+
+    m = stripped.match(/^(\d{3,4})\s*(AM|PM)?$/);
+    if (m) {
+      var digits = m[1];
+      var hour = digits.length === 3 ? parseInt(digits[0], 10) : parseInt(digits.slice(0, 2), 10);
+      var minute = parseInt(digits.slice(-2), 10);
+      return finish(hour, minute, m[2] || null);
+    }
+
+    m = stripped.match(/^(\d{1,2})\s*(AM|PM)$/);
+    if (m) return finish(parseInt(m[1], 10), 0, m[2]);
+
+    m = stripped.match(/^(\d{1,2})$/);
+    if (m) return finish(parseInt(m[1], 10), 0, null);
+
+    return null;
+  }
+
+  /**
+   * Parse homepage split HH / MM fields, including compact paste into HH ("0800").
+   */
+  function parseFlexibleDeparture(hh, mm, period) {
+    hh = (hh || "").trim();
+    mm = (mm || "").trim();
+    period = period === "PM" ? "PM" : "AM";
+
+    // Compact / free-form typed into the hour field (pasted 0800, 8am, etc.)
+    if (hh && !mm && !/^\d{1,2}$/.test(hh)) {
+      return parseFlexibleTimeString(hh, period);
+    }
+    // Hour field holds a full compact time while minutes also filled — prefer hh alone
+    if (/^\d{3,4}$/.test(hh)) {
+      return parseFlexibleTimeString(hh + (/\b(AM|PM)\b/i.test(hh) ? "" : " " + period), period);
+    }
+
+    var raw = hh || "";
+    if (mm) {
+      raw = (hh || "12") + ":" + mm.padStart(2, "0");
+    } else if (hh) {
+      raw = hh + ":00";
+    } else {
+      return null;
+    }
+    return parseFlexibleTimeString(raw + " " + period, period);
+  }
 
   /**
    * Validate a 12-hour time entry (HH:MM with AM/PM).
    * Returns null if valid, or an error message string if invalid.
+   * Empty is allowed; missing minutes default to 00.
    */
   function validateTimeInput(hh, mm) {
     if (!hh && !mm) return null; // empty is fine — time is optional
-    var hours = parseInt(hh, 10);
-    var minutes = parseInt(mm, 10);
-    if (isNaN(hours) || isNaN(minutes)) return t("error.validTime");
-    if (hours < 1 || hours > 12) return t("error.hourRange");
-    if (minutes < 0 || minutes > 59) return t("error.minuteRange");
-    return null;
+    return parseFlexibleDeparture(hh, mm, "AM") ? null : t("error.validTime");
   }
 
   /**
@@ -1833,13 +2023,7 @@
    */
   function validateTimeString(timeStr) {
     if (!timeStr) return null; // empty is fine
-    var match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-    if (!match) return t("error.timeFormat");
-    var hours = parseInt(match[1], 10);
-    var minutes = parseInt(match[2], 10);
-    if (hours < 1 || hours > 12) return t("error.hourRange12");
-    if (minutes < 0 || minutes > 59) return t("error.minuteRange");
-    return null;
+    return parseFlexibleTimeString(timeStr, "AM") ? null : t("error.timeFormat");
   }
 
   /* ------------------------------------------------------------------------

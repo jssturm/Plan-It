@@ -427,41 +427,31 @@ def _geocode_census(addr: str) -> tuple[float, float] | None:
     Handles structured US addresses (street, city, state, zip) that
     Nominatim often fails on. No API key, no rate limit.
 
+    Free-form input without commas (e.g. ``9801 International Dr Orlando FL
+    32819``) is normalized via :func:`parse_us_address` before the Census
+    request.
+
     Returns (lat, lon) or None.
     """
     import json
     import urllib.request
     import urllib.parse
 
-    # Parse address components from the input string.
-    parts = [p.strip() for p in addr.split(",")]
-    if len(parts) < 2:
-        return None
+    from app.engine.addressparse import parse_us_address
 
-    street = parts[0]
-    zip_match = re.search(r'\b(\d{5}(?:-\d{4})?)\b', parts[-1])
-    zip_code = zip_match.group(1) if zip_match else ""
-    has_street_number = bool(re.search(r'\d', parts[0]))
-    if not has_street_number and not zip_code:
-        return None
-    state, _remainder_state = _extract_state(parts[-1])
-    if len(parts) >= 3:
-        city = parts[-2].strip()
-    elif len(parts) == 2 and state:
-        if re.search(r'\d', parts[0]):
-            remainder = re.sub(r'\b\d{5}(?:-\d{4})?\b', '', parts[1])
-            remainder = re.sub(r'\b[A-Za-z]{2}\b', '', remainder)
-            city = remainder.strip().rstrip(",").strip()
-        else:
-            city = parts[0].strip()
-            street = ""
-    else:
-        city = ""
+    parts = parse_us_address(addr)
+    street = parts["street"]
+    city = parts["city"]
+    state = parts["state"]
+    zip_code = parts["zip"]
 
     if not city or not state:
         return None
-    has_street = bool(re.search(r'\d', street))
-    if has_street and not zip_code:
+    # Census structured lookup works best with a street; city+state+zip is ok
+    # for place-level matches when street is absent.
+    if street and not zip_code:
+        # Keep prior behavior: street-level queries without ZIP are unreliable
+        # on Census — fall through to Nominatim.
         return None
 
     params = urllib.parse.urlencode({
@@ -479,7 +469,10 @@ def _geocode_census(addr: str) -> tuple[float, float] | None:
             data = json.loads(resp.read().decode())
             if data.get("result", {}).get("addressMatches"):
                 coords = data["result"]["addressMatches"][0]["coordinates"]
-                logger.info("Census geocoded: %r → (%f, %f)", addr[:60], coords["y"], coords["x"])
+                logger.info(
+                    "Census geocoded: %r → (%f, %f) [street=%r city=%r state=%r zip=%r]",
+                    addr[:60], coords["y"], coords["x"], street, city, state, zip_code,
+                )
                 return (coords["y"], coords["x"])
             return None
     except Exception:
@@ -532,6 +525,11 @@ def _osrm_transit(origin: str, destination: str) -> dict[str, str] | None:
     import urllib.parse
     import json
     import time
+
+    from app.engine.addressparse import normalize_us_address
+
+    origin = normalize_us_address(origin)
+    destination = normalize_us_address(destination)
 
     # ── Step 1a: Geocode origin to determine country context ────────────
     origin_coord = _geocode_census(origin)
