@@ -17,6 +17,10 @@ from dateutil.parser import parse as parse_date
 from dateutil.parser import ParserError
 
 from app.engine import crowd, currency, search, weather
+from app.engine.addressparse import normalize_us_address
+from app.engine.timeparse import fmt_time as _fmt_time
+from app.engine.timeparse import normalize_time as _normalize_departure_time
+from app.engine.timeparse import parse_time as _parse_time
 from app.llm import deepseek_client
 
 logger = logging.getLogger("plan-it.planner")
@@ -64,6 +68,9 @@ def build_travel_plan(
     venue = search.search_venue_info(search_venue_name)
 
     # 3. Build the route legs (pass departure_time for meal-label context)
+    # Normalize free-form starting addresses so Census geocoding gets structure.
+    if starting_location:
+        starting_location = normalize_us_address(starting_location)
     route = _build_route(intent, venue, starting_location, user_input,
                          departure_time=departure_time)
 
@@ -1313,118 +1320,6 @@ def _check_traffic_warning(step: str) -> str | None:
     if "tampa" in step_lower or "i-275" in step_lower:
         return "⚠ Tampa Bay area traffic can be heavy near bridges and I-275 during peak hours"
     return None
-
-
-def _parse_time(time_str: str) -> tuple[int, int]:
-    m = re.match(r'(\d{1,2}):(\d{2})\s*(AM|PM)', time_str, re.IGNORECASE)
-    if not m:
-        return (8, 0)
-    h = int(m.group(1))
-    minute = int(m.group(2))
-    meridiem = m.group(3).upper()
-    if meridiem == "PM" and h < 12:
-        h += 12
-    if meridiem == "AM" and h == 12:
-        h = 0
-    return (h, minute)
-
-
-def _fmt_time(hour: int, minute: int) -> str:
-    """Format a 24-hour hour and minute as a 12-hour clock string.
-
-    Handles overflow beyond 24 hours by appending a `` +N`` day-offset
-    suffix (e.g. ``02:48 AM +1`` for hour=26).  Previously, the function
-    only subtracted 24 once, so hours ≥ 48 (e.g. a two-day drive with
-    rest stops) produced invalid times like ``14:48 PM``.
-    """
-    day_offset = hour // 24
-    hour = hour % 24
-    meridiem = "AM"
-    if hour >= 12:
-        meridiem = "PM"
-    display_h = hour if hour <= 12 else hour - 12
-    if display_h == 0:
-        display_h = 12
-    suffix = f" +{day_offset}" if day_offset > 0 else ""
-    return f"{display_h:02d}:{minute:02d} {meridiem}{suffix}"
-
-
-# ---------------------------------------------------------------------------
-# Default generators
-# ---------------------------------------------------------------------------
-
-
-def _to_24h(hour: int, meridiem: str | None) -> int | None:
-    """Convert hour + optional AM/PM to 24-hour clock, or None if invalid."""
-    if meridiem:
-        if hour < 1 or hour > 12:
-            return None
-        if meridiem == "AM" and hour == 12:
-            return 0
-        if meridiem == "PM" and hour != 12:
-            return hour + 12
-        return hour
-    # No meridiem: treat as 24-hour when hour >= 13, else leave as-is (AM-ish).
-    if hour < 0 or hour > 23:
-        return None
-    return hour
-
-
-def _normalize_departure_time(raw: str) -> str:
-    """Normalize a user-entered departure time string to 'HH:MM AM/PM' format.
-
-    Accepts '7:00 AM', '07:00', '7am', '0700', '0800 AM', '7:00AM', bare
-    hour integers, and similar free-form variants.
-    Returns the normalized time string or the raw input if unparseable.
-    """
-    stripped = re.sub(r"[.\u00b7]", ":", raw.strip().upper())
-    stripped = re.sub(r"\s+", " ", stripped).strip()
-
-    def _finish(hour: int, minute: int, meridiem: str | None) -> str | None:
-        if minute < 0 or minute > 59:
-            return None
-        hour_24 = _to_24h(hour, meridiem)
-        if hour_24 is None:
-            return None
-        return _fmt_time(hour_24, minute)
-
-    # Try "H:MM AM/PM" or "HH:MM AM/PM" (optional colon variants already normalized)
-    m = re.match(r"^(\d{1,2}):(\d{2})\s*(AM|PM)?$", stripped)
-    if m:
-        result = _finish(int(m.group(1)), int(m.group(2)), m.group(3))
-        if result:
-            return result
-
-    # Compact HHmm / Hmm with optional AM/PM: "0700", "800", "0800 AM", "0800AM"
-    m = re.match(r"^(\d{3,4})\s*(AM|PM)?$", stripped)
-    if m:
-        digits = m.group(1)
-        meridiem = m.group(2)
-        if len(digits) == 3:
-            hour, minute = int(digits[0]), int(digits[1:])
-        else:
-            hour, minute = int(digits[:2]), int(digits[2:])
-        # With AM/PM, hour must be 1–12; without, allow 00–23 military style.
-        result = _finish(hour, minute, meridiem)
-        if result:
-            return result
-
-    # Try "7am", "7 AM", "08AM" etc without minutes
-    m = re.match(r"^(\d{1,2})\s*(AM|PM)$", stripped)
-    if m:
-        result = _finish(int(m.group(1)), 0, m.group(2))
-        if result:
-            return result
-
-    # Try bare hour like "7", "14"
-    m = re.match(r"^(\d{1,2})$", stripped)
-    if m:
-        result = _finish(int(m.group(1)), 0, None)
-        if result:
-            return result
-
-    # Return as-is; _parse_time will handle fallback
-    return raw
 
 
 def _default_flights(origin: str, destination: str) -> list[dict[str, str]]:

@@ -9,6 +9,7 @@ location (maps URL) and description (action text).
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -221,32 +222,26 @@ def _pick_event_date(plan: dict) -> datetime:
 
 
 def _parse_to_datetime(time_str: str, base_date: datetime) -> datetime | None:
-    """Parse a time string like '07:30 AM' or '08:00 AM +1' into a datetime."""
-    import re
+    """Parse a free-form time string into a datetime on *base_date*."""
+    from app.engine.timeparse import normalize_time, parse_time
 
-    time_str = time_str.strip()
+    time_str = (time_str or "").strip()
     if not time_str:
         return None
 
-    # Handle "+1" suffix for next-day events
-    is_next_day = "+1" in time_str
-    time_str = time_str.replace("+1", "").strip()
-
-    m = re.match(r"(\d{1,2}):(\d{2})\s*(AM|PM)", time_str, re.IGNORECASE)
-    if not m:
+    # Handle "+1" / "+N" suffix for next-day events (also preserved by normalize)
+    is_next_day = bool(re.search(r"\+\d+", time_str))
+    normalized = normalize_time(time_str)
+    hour, minute = parse_time(normalized, default=(-1, -1))
+    if hour < 0:
         return None
 
-    hour = int(m.group(1))
-    minute = int(m.group(2))
-    meridiem = m.group(3).upper()
-
-    if meridiem == "PM" and hour < 12:
-        hour += 12
-    if meridiem == "AM" and hour == 12:
-        hour = 0
-
-    result = base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if is_next_day:
+    result = base_date.replace(hour=hour % 24, minute=minute, second=0, microsecond=0)
+    # Day offsets beyond +1 from normalize_time's fmt (+N) — apply full offset
+    day_m = re.search(r"\+(\d+)", normalized)
+    if day_m:
+        result += timedelta(days=int(day_m.group(1)))
+    elif is_next_day:
         result += timedelta(days=1)
     return result
 

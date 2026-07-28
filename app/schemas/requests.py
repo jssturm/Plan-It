@@ -5,6 +5,9 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.engine.addressparse import normalize_us_address
+from app.engine.timeparse import normalize_time
+
 # Patterns that indicate prompt injection or system-instruction override attempts.
 # These are rejected at the API boundary before any processing occurs.
 _PROMPT_INJECTION_PATTERNS: list[re.Pattern] = [
@@ -37,8 +40,11 @@ class TravelRequest(BaseModel):
         min_length=1,
         max_length=500,
         description="Where the trip starts from (e.g. home address, hotel name). "
-        "If omitted, the planner will flag it as unspecified rather than guessing.",
-        examples=["Hyatt Regency Orlando, 9801 International Dr"],
+        "Free-form US addresses are accepted (commas optional) and normalized when possible.",
+        examples=[
+            "Hyatt Regency Orlando, 9801 International Dr",
+            "9801 International Dr Orlando FL 32819",
+        ],
     )
     restaurant_preferences: Optional[str] = Field(
         default=None,
@@ -59,29 +65,30 @@ class TravelRequest(BaseModel):
         default=None,
         min_length=1,
         max_length=30,
-        pattern=r"^(0?[1-9]|1[0-2]):[0-5]\d\s+(AM|PM)$",
-        description="User-defined departure time in 12-hour format (e.g. '7:00 AM', '08:00 AM', '6:30 PM'). "
-        "Hour must be 1-12, minute must be 00-59, and AM/PM suffix is required. "
-        "If omitted, the departure time will be left blank in the itinerary.",
-        examples=["7:00 AM", "08:00 AM", "6:30 PM"],
+        description="User-defined departure time. Accepts free-form values such as "
+        "'7:00 AM', '07:00', '7am', '0700', or '0800 AM' and normalizes to "
+        "'HH:MM AM/PM'. If omitted, the departure time is left blank.",
+        examples=["7:00 AM", "08:00 AM", "0800 AM", "6:30 PM"],
     )
 
     @model_validator(mode="after")
     def strip_and_validate(self) -> "TravelRequest":
-        """Strip leading/trailing whitespace and reject obviously bogus input."""
+        """Strip, normalize free-form fields, and reject injection attempts."""
         self.input = self.input.strip()
         if self.starting_location is not None:
-            self.starting_location = self.starting_location.strip()
+            self.starting_location = normalize_us_address(self.starting_location.strip())
         if self.restaurant_preferences is not None:
             self.restaurant_preferences = self.restaurant_preferences.strip()
         if self.departure_time is not None:
-            self.departure_time = self.departure_time.strip()
+            normalized = normalize_time(self.departure_time.strip())
+            if not re.match(r"^\d{1,2}:\d{2}\s*(AM|PM)", normalized, re.IGNORECASE):
+                raise ValueError(
+                    "departure_time could not be parsed — try formats like "
+                    "'7:00 AM', '0700', or '8am'"
+                )
+            self.departure_time = normalized
         if not self.input:
             raise ValueError("input must not be empty or whitespace-only")
-        # Reject prompt-injection / system-override attempts before any
-        # processing. This protects the planner from malicious input that
-        # tries to override system instructions.  All user-supplied free-text
-        # fields are checked, not just ``input``.
         if _contains_injection(self.input):
             raise ValueError("input contains disallowed content")
         if self.starting_location and _contains_injection(self.starting_location):
