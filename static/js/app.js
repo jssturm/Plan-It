@@ -739,6 +739,7 @@
       return '<div class="text-sm text-muted">' + t("schedule.noItems") + '</div>';
     }
 
+    const venueName = plan.venue_name || "";
     const items = plan.schedule
       .map((item, idx) => {
         const prioClass = item.priority || "medium";
@@ -756,11 +757,6 @@
         if (item.reminder_min) {
           metaBadges.push(
             '<span class="badge badge-reminder" title="' + t("modal.field.reminder") + '">' + t("badge.reminder", { min: item.reminder_min }) + '</span>'
-          );
-        }
-        if (item.walking_map_url) {
-          metaBadges.push(
-            '<a href="' + escapeHtml(item.walking_map_url) + '" target="_blank" rel="noopener" class="badge badge-walk-map" title="' + t("schedule.walkToHere") + '">' + t("schedule.walkToHere") + '</a>'
           );
         }
         if (item.restaurant) {
@@ -792,21 +788,49 @@
         var reminderSelect = '<select class="reminder-inline" data-plan-id="' + escapeHtml(plan.plan_id) + '" data-schedule-index="' + idx + '" title="' + t("modal.field.reminder") + '">'
               + reminderOptions.map(function (v) {
                 var label = v === "" ? t("schedule.reminderNone") : t("schedule.reminderMin", { min: v });
-                var sel = currentReminder === v ? " selected" : "";
+                var sel = String(currentReminder) === String(v) ? " selected" : "";
                 return '<option value="' + v + '"' + sel + '>' + label + '</option>';
               }).join("")
             + '</select>';
 
+        var mapDest = resolveMapDestination(item, venueName);
+        var mapActions = "";
+        if (mapDest || item.walking_map_url) {
+          mapActions = '<div class="schedule-map-actions">';
+          if (mapDest) {
+            mapActions +=
+              '<button type="button" class="btn btn-sm btn-primary map-from-here-btn" ' +
+              'data-destination="' + escapeHtml(mapDest) + '" ' +
+              'title="' + t("schedule.mapFromHereHint") + '">' +
+              t("schedule.mapFromHere") +
+              "</button>";
+          }
+          if (item.walking_map_url) {
+            mapActions +=
+              '<a href="' + escapeHtml(item.walking_map_url) + '" target="_blank" rel="noopener" ' +
+              'class="btn btn-sm btn-secondary walk-from-prev-btn">' +
+              t("schedule.walkFromPrev") +
+              "</a>";
+          }
+          mapActions += "</div>";
+        }
+
         return `
           <div class="timeline-item" data-schedule-index="${idx}">
             <div class="timeline-dot ${prioClass}"></div>
-            <div class="flex items-center gap-2">
-              <span class="timeline-time">${escapeHtml(item.time || "—")}</span>
+            <button type="button" class="timeline-item-header" aria-expanded="false" data-schedule-index="${idx}">
+              <div class="timeline-item-header-main">
+                <span class="timeline-time">${escapeHtml(item.time || "—")}</span>
+                <span class="timeline-action">${escapeHtml(item.action)}</span>
+              </div>
+              <span class="timeline-expand-icon" aria-hidden="true">&#9660;</span>
+            </button>
+            <div class="timeline-item-body" hidden>
               ${editControls}
+              ${item.meal_timing_note ? `<div class="text-xs text-muted mb-2">&#128161; ${escapeHtml(item.meal_timing_note)}</div>` : ""}
+              ${mapActions}
+              <div class="timeline-meta">${reminderSelect}${metaBadges.join("")}</div>
             </div>
-            <div class="timeline-action">${escapeHtml(item.action)}</div>
-            ${item.meal_timing_note ? `<div class="text-xs text-muted mb-2">&#128161; ${escapeHtml(item.meal_timing_note)}</div>` : ""}
-            <div class="timeline-meta">${reminderSelect}${metaBadges.join("")}</div>
           </div>`;
       })
       .join("");
@@ -824,6 +848,7 @@
       <div class="section">
         <div class="section-header">
           <span class="section-title">${t("section.schedule")}</span>
+          <span class="text-xs text-muted">${t("schedule.tapToExpand")}</span>
         </div>
         <div class="card">
           <div class="timeline" id="schedule-timeline">${items}</div>
@@ -831,6 +856,110 @@
         </div>
       </div>
     `;
+  }
+
+  /** Prefer explicit map_destination; else Maps URL dest; else "Visit X" / venue. */
+  function resolveMapDestination(item, venueName) {
+    if (item && item.map_destination) return String(item.map_destination).trim();
+    if (item && item.walking_map_url) {
+      try {
+        var u = new URL(item.walking_map_url);
+        var dest = u.searchParams.get("destination");
+        if (dest) return decodeURIComponent(dest.replace(/\+/g, " "));
+      } catch (e) { /* ignore */ }
+    }
+    var action = (item && item.action) ? String(item.action) : "";
+    var visit = action.match(/^Visit\s+(.+?)(?:\s+—|$)/i);
+    if (visit) {
+      var place = visit[1].split(" — ")[0].trim();
+      if (venueName && place.toLowerCase().indexOf(venueName.toLowerCase()) === -1) {
+        return place + ", " + venueName;
+      }
+      return place;
+    }
+    if (venueName && /arrive at/i.test(action)) return venueName;
+    return "";
+  }
+
+  function buildWalkingMapsUrl(origin, destination) {
+    var url = "https://www.google.com/maps/dir/?api=1&destination=" +
+      encodeURIComponent(destination) + "&travelmode=walking";
+    if (origin) {
+      url += "&origin=" + encodeURIComponent(origin);
+    }
+    return url;
+  }
+
+  function openWalkingMapFromHere(destination) {
+    if (!destination) {
+      showToast(t("schedule.mapNoDestination"), "error");
+      return;
+    }
+    function openWithOrigin(origin) {
+      window.open(buildWalkingMapsUrl(origin, destination), "_blank", "noopener,noreferrer");
+    }
+    if (!navigator.geolocation) {
+      openWithOrigin(null);
+      showToast(t("schedule.mapOpenedNoGeo"), "info");
+      return;
+    }
+    showToast(t("schedule.locating"), "info");
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        openWithOrigin(pos.coords.latitude + "," + pos.coords.longitude);
+        showToast(t("schedule.mapOpened"), "success");
+      },
+      function () {
+        openWithOrigin(null);
+        showToast(t("schedule.mapOpenedNoGeo"), "info");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
+  /** Expand/collapse stops and map-from-here — shared by plan detail + inline result. */
+  function handleScheduleUiClick(e) {
+    var mapBtn = e.target.closest(".map-from-here-btn");
+    if (mapBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      openWalkingMapFromHere(mapBtn.getAttribute("data-destination") || "");
+      return;
+    }
+
+    var header = e.target.closest(".timeline-item-header");
+    if (!header) return;
+    // Ignore clicks that bubbled from controls inside the expanded body
+    if (e.target.closest(".timeline-item-body")) return;
+
+    var item = header.closest(".timeline-item");
+    if (!item) return;
+    var body = item.querySelector(".timeline-item-body");
+    if (!body) return;
+
+    var willOpen = body.hasAttribute("hidden");
+    // Accordion: close other open stops in the same timeline
+    var timeline = item.closest(".timeline");
+    if (timeline && willOpen) {
+      timeline.querySelectorAll(".timeline-item.is-expanded").forEach(function (el) {
+        if (el === item) return;
+        el.classList.remove("is-expanded");
+        var h = el.querySelector(".timeline-item-header");
+        var b = el.querySelector(".timeline-item-body");
+        if (h) h.setAttribute("aria-expanded", "false");
+        if (b) b.setAttribute("hidden", "");
+      });
+    }
+
+    if (willOpen) {
+      body.removeAttribute("hidden");
+      item.classList.add("is-expanded");
+      header.setAttribute("aria-expanded", "true");
+    } else {
+      body.setAttribute("hidden", "");
+      item.classList.remove("is-expanded");
+      header.setAttribute("aria-expanded", "false");
+    }
   }
 
   function renderRoute(plan) {
@@ -1044,6 +1173,7 @@
       { key: "restaurant", label: "Restaurant" },
       { key: "reminder_min", label: "Reminder Before (min)", type: "select", options: ["", "5", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55", "60"] },
       { key: "walking_map_url", label: "Walking Map URL" },
+      { key: "map_destination", label: "Map Destination (for walk-from-here)" },
       { key: "meal_timing_note", label: "Meal Timing Note" },
       { key: "backup_plan", label: "Backup Plan" },
     ];
@@ -1413,10 +1543,11 @@
 
     // Plan detail content delegation for schedule editing & delete
     $planDetailContent.addEventListener("click", (e) => {
+      handleScheduleUiClick(e);
+
       const editBtn = e.target.closest(".edit-schedule-btn");
       const removeBtn = e.target.closest(".remove-schedule-btn");
       const addBtn = e.target.closest("#btn-add-schedule-item");
-      const deleteBtn = e.target.closest("#btn-delete-plan");
 
       if (editBtn && currentPlanId) {
         const idx = parseInt(editBtn.dataset.index, 10);
@@ -1434,6 +1565,11 @@
       if (addBtn && currentPlanId) {
         openAddItemModal(currentPlanId);
       }
+    });
+
+    // Inline new-trip result: expand + map actions
+    $resultNewTrip.addEventListener("click", function (e) {
+      handleScheduleUiClick(e);
     });
 
     // Reminder dropdown change (plan detail)
