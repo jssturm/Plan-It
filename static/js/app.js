@@ -181,13 +181,12 @@
   }
 
   function parseTimeString(timeStr) {
-    var match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (!match) return null;
-    var hours = parseInt(match[1], 10);
-    var mins = parseInt(match[2], 10);
-    var period = match[3].toUpperCase();
-    if (period === "PM" && hours < 12) hours += 12;
-    if (period === "AM" && hours === 12) hours = 0;
+    var parsed = parseFlexibleTimeString(timeStr, "AM");
+    if (!parsed) return null;
+    var hours = parseInt(parsed.hh, 10);
+    var mins = parseInt(parsed.mm, 10);
+    if (parsed.period === "PM" && hours < 12) hours += 12;
+    if (parsed.period === "AM" && hours === 12) hours = 0;
     return hours * 60 + mins;
   }
 
@@ -412,10 +411,12 @@
       return;
     }
 
-    const start = $tripStart.value.trim();
-    // Address validation removed — Nominatim handles free-form geocoding
-    // for any reasonable input (city names, addresses, landmarks, etc.)
-
+    const startRaw = $tripStart.value.trim();
+    // Soft-normalize free-form US addresses (commas optional) without blocking.
+    const start = startRaw ? normalizeUSAddress(startRaw) : "";
+    if (start && start !== startRaw && $tripStart) {
+      $tripStart.value = start;
+    }
     // Check for city names without a state — duplicate cities exist
     // (e.g. Jacksonville FL/TX/NC, Portland OR/ME, Springfield IL/MO/MA)
     const cityErr = validateCityState(input);
@@ -1809,48 +1810,108 @@
   }
 
   /* ------------------------------------------------------------------------
-     Address Validation
+     Address Normalization (graceful — never blocks submit)
      ------------------------------------------------------------------------ */
+
+  var _US_STATE_NAMES = {
+    alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
+    colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA",
+    hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA",
+    kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD",
+    massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS",
+    missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK",
+    oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC",
+    "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT",
+    virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI",
+    wyoming: "WY", "district of columbia": "DC", "washington dc": "DC", dc: "DC"
+  };
+
+  /**
+   * Soft-normalize a free-form US address into "street, city, ST ZIP" when
+   * components can be inferred. Never rejects — returns original trim on failure.
+   */
+  function normalizeUSAddress(raw) {
+    if (!raw || !String(raw).trim()) return raw;
+    var text = String(raw).trim().replace(/;/g, ",").replace(/\s+/g, " ");
+    var zip = "";
+    var zipMatch = text.match(/\b(\d{5}(?:-\d{4})?)\b/);
+    if (zipMatch) {
+      zip = zipMatch[1];
+      text = (text.slice(0, zipMatch.index) + " " + text.slice(zipMatch.index + zipMatch[0].length))
+        .trim().replace(/^,|,$/g, "").trim();
+    }
+
+    var state = "";
+    var lower = text.toLowerCase();
+    var bestLen = 0;
+    Object.keys(_US_STATE_NAMES).forEach(function (name) {
+      var re = new RegExp("\\b" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+      if (re.test(lower) && name.length > bestLen) {
+        bestLen = name.length;
+        state = _US_STATE_NAMES[name];
+      }
+    });
+    if (state && bestLen > 2) {
+      var matchedName = Object.keys(_US_STATE_NAMES).filter(function (n) {
+        return _US_STATE_NAMES[n] === state && n.length === bestLen;
+      })[0];
+      var nameRe = new RegExp("\\b" + matchedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+      text = text.replace(nameRe, " ").replace(/\s{2,}/g, " ").trim().replace(/^,|,$/g, "").trim();
+    } else {
+      var codeMatch = text.match(_stateCodePattern);
+      if (codeMatch) {
+        state = codeMatch[1].toUpperCase();
+        text = text.replace(new RegExp("\\b" + codeMatch[1] + "\\b", "i"), " ")
+          .replace(/\s{2,}/g, " ").trim().replace(/^,|,$/g, "").trim();
+      }
+    }
+
+    if (!state && !zip) return String(raw).trim();
+
+    var street = "";
+    var city = "";
+    if (text.indexOf(",") !== -1) {
+      var parts = text.split(",").map(function (p) { return p.trim(); }).filter(Boolean);
+      if (parts.length >= 2 && /\d/.test(parts[0])) {
+        street = parts[0];
+        city = parts[parts.length - 1];
+      } else if (parts.length >= 1) {
+        city = parts[parts.length - 1];
+      }
+    } else {
+      var streetCity = text.match(new RegExp(
+        "^(\\d+\\s+.{1,80}?\\b(?:street|st|avenue|ave|boulevard|blvd|road|rd|drive|dr|lane|ln|court|ct|circle|cir|way|place|pl|parkway|pkwy|highway|hwy)\\.?)\\s+(.+)$",
+        "i"
+      ));
+      if (streetCity) {
+        street = streetCity[1].trim();
+        city = streetCity[2].trim();
+      } else if (/^\d/.test(text)) {
+        var tokens = text.split(/\s+/);
+        if (tokens.length >= 3) {
+          street = tokens.slice(0, -1).join(" ");
+          city = tokens[tokens.length - 1];
+        } else {
+          city = text;
+        }
+      } else {
+        city = text;
+      }
+    }
+
+    var chunks = [];
+    if (street) chunks.push(street);
+    var cityState = [city, state].filter(Boolean).join(" ").trim();
+    if (zip) cityState = cityState ? cityState + " " + zip : zip;
+    if (cityState) chunks.push(cityState);
+    return chunks.length ? chunks.join(", ") : String(raw).trim();
+  }
+
+  /** @deprecated Kept for compatibility; always returns null (non-blocking). */
   function validateAddress(addr) {
-    if (!addr) return null; // empty is fine (field is optional)
-
-    // Must contain a street number (digits at start or after a comma)
-    var hasStreet = /\d+\s+\w+/i.test(addr);
-    // Must contain a city-like component followed by comma/space and
-    // either a US state abbreviation OR a spelled-out state name
-    var hasCityState = /[a-z]+(?:,\s*|\s+)(A[LKZR]|C[AOT]|D[EC]|F[LM]|G[AU]|HI|I[DLNA]|K[SY]|LA|M[ADEHINOPST]|N[CDEHJMVY]|O[HKR]|P[AWR]|RI|S[CD]|T[NX]|UT|V[AIT]|W[AIVY])\b/i.test(addr) || _fullStatePattern.test(addr);
-    // Must contain a 5-digit ZIP code (optionally with +4)
-    var hasZip = /\b\d{5}(?:-\d{4})?\b/.test(addr);
-
-    var missing = [];
-    if (!hasStreet) missing.push("street address");
-    if (!hasCityState) missing.push("city and state");
-    if (!hasZip) missing.push("zip code");
-
-    if (missing.length === 0) return null;
-
-    if (missing.length === 3) {
-      return t("error.missingFullAddress");
-    }
-
-    // Single missing field — give a specific hint
-    if (missing.length === 1) {
-      if (missing[0] === "street address") {
-        return t("error.missingStreet");
-      }
-      if (missing[0] === "city and state") {
-        return t("error.missingCityState");
-      }
-      if (missing[0] === "zip code") {
-        return t("error.missingZip");
-      }
-    }
-
-    // Two missing fields
-    if (missing[0] === "city and state" || missing[1] === "city and state") {
-      return t("error.missingCityState2");
-    }
-    return t("error.missingGeneric");
+    return null;
   }
 
   /* ------------------------------------------------------------------------
