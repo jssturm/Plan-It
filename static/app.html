@@ -19,14 +19,6 @@
   <!-- Sidebar overlay for mobile -->
   <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
-  <!-- Bug Report FAB (floating action button) -->
-  <div id="bug-report-fab" class="bug-report-fab">
-    <span class="bug-report-fab-badge">· alpha</span>
-    <button id="btn-bug-report" class="bug-report-fab-btn" data-i18n-html="bug.fab">
-      🐛 Report a bug
-    </button>
-  </div>
-
   <!-- =======================================================================
        App Shell
        ======================================================================= -->
@@ -58,7 +50,7 @@
         </button>
 
         <div class="sidebar-nav-label mt-4" data-i18n="nav.savedPlan">Saved Plan</div>
-        <div id="sidebar-saved-plans">
+        <div id="sidebar-saved-plans" data-bugdrop-mask>
           <div class="text-xs text-muted" style="padding: var(--space-2) var(--space-3);" data-i18n="nav.noSavedPlans">
             No saved plans yet
           </div>
@@ -80,6 +72,13 @@
             <span class="theme-toggle-label" id="theme-toggle-label">Dark</span>
           </button>
         </div>
+        <div id="bug-report-fab" class="bug-report-fab">
+          <span class="bug-report-fab-badge" data-i18n="bug.sectionLabel">Feedback · alpha</span>
+          <button id="btn-bug-report" class="bug-report-fab-btn" data-i18n-html="bug.fab">
+            🐛 Report a bug
+          </button>
+        </div>
+
         <div class="health-indicator">
           <span id="health-dot" class="health-dot"></span>
           <span id="health-label" data-i18n="health.checking">API checking...</span>
@@ -113,7 +112,7 @@
         <div class="card" style="max-width:720px;">
           <div class="form-group">
               <label class="form-label" for="trip-input" data-i18n="newTrip.whatsYourTrip">What's your trip?</label>
-              <textarea id="trip-input" class="form-textarea" rows="8"
+              <textarea id="trip-input" class="form-textarea" rows="8" data-bugdrop-mask
                 data-i18n-placeholder="newTrip.tripPlaceholder"
                 placeholder="e.g. Drive to Kennedy Space Center from Orlando tomorrow — stop for lunch, stay overnight at a hotel near Cocoa Beach, and drive back the next morning. Need long-term parking at KSC."></textarea>
               <div class="form-hint" data-i18n="newTrip.tripHint">Include as many details as possible — venue, date, mode of travel (drive/fly), meal stops, hotel stays, long-term parking, return trip, and any special interests. The more you tell us, the better your itinerary.</div>
@@ -122,13 +121,13 @@
           <div class="grid-2">
             <div class="form-group">
               <label class="form-label" for="trip-departure" data-i18n="newTrip.departureTime">Departure Time</label>
-              <div class="time-input-group">
+              <div class="time-input-group" data-bugdrop-mask>
                 <input id="trip-departure-hh" class="form-input time-input-hh" type="text"
                   placeholder="07" maxlength="2" autocomplete="off" />
                 <span class="time-colon">:</span>
                 <input id="trip-departure-mm" class="form-input time-input-mm" type="text"
                   placeholder="00" maxlength="2" autocomplete="off" />
-                <div class="ampm-toggle" id="trip-departure-ampm">
+                <div class="ampm-toggle" id="trip-departure-ampm" data-bugdrop-mask>
                   <button type="button" class="ampm-btn active" data-period="AM">AM</button>
                   <button type="button" class="ampm-btn" data-period="PM">PM</button>
                 </div>
@@ -137,7 +136,7 @@
             </div>
             <div class="form-group">
               <label class="form-label" for="trip-start" data-i18n="newTrip.startingLocation">Starting Location (Street Address, City, State, Zip Code)</label>
-              <input id="trip-start" class="form-input" type="text"
+              <input id="trip-start" class="form-input" type="text" data-bugdrop-mask
                 data-i18n-placeholder="newTrip.startPlaceholder"
                 placeholder="e.g. 9801 International Dr, Orlando, Florida 32819" />
               <div class="form-hint" data-i18n="newTrip.startHint">Required if provided — must include street address, city, state, and zip code, separated by commas.</div>
@@ -145,7 +144,7 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="trip-restaurants" data-i18n="newTrip.restaurantPrefs">Restaurant Preferences</label>
-            <input id="trip-restaurants" class="form-input" type="text"
+            <input id="trip-restaurants" class="form-input" type="text" data-bugdrop-mask
               data-i18n-placeholder="newTrip.restaurantPlaceholder"
               placeholder="e.g. vegetarian, Italian, $$-$$$ range" />
             <div class="form-hint" data-i18n="newTrip.restaurantHint">Diet, cuisine, or price preferences for meal stops.</div>
@@ -165,7 +164,7 @@
         </div>
 
         <!-- Result area (hidden until plan is generated) -->
-        <div id="result-new-trip" class="hidden" style="margin-top: var(--space-8);"></div>
+        <div id="result-new-trip" class="hidden" style="margin-top: var(--space-8);" data-bugdrop-mask></div>
       </section>
 
       <!-- Page: My Plans -->
@@ -174,7 +173,7 @@
           <h2 data-i18n="myPlans.title">My Plans</h2>
           <p data-i18n="myPlans.subtitle">Previously generated itineraries stored in this session.</p>
         </div>
-        <div id="plans-list"></div>
+        <div id="plans-list" data-bugdrop-mask></div>
         <div id="plans-empty" class="empty-state hidden">
           <div class="empty-state-icon">&#128203;</div>
           <div class="empty-state-title" data-i18n="myPlans.emptyTitle">No saved plans</div>
@@ -186,10 +185,10 @@
       <section id="page-plan-detail" class="page hidden">
         <div class="page-header">
           <button class="btn btn-sm btn-ghost mb-2" id="btn-back-plans">&#8592; <span data-i18n="myPlans.title">Back to Plans</span></button>
-          <h2 id="plan-detail-title" data-i18n="topbar.itinerary">Itinerary</h2>
-          <p id="plan-detail-subtitle"></p>
+          <h2 id="plan-detail-title" data-i18n="topbar.itinerary" data-bugdrop-mask>Itinerary</h2>
+          <p id="plan-detail-subtitle" data-bugdrop-mask></p>
         </div>
-        <div id="plan-detail-content"></div>
+        <div id="plan-detail-content" data-bugdrop-mask></div>
       </section>
     </main>
   </div>
@@ -198,13 +197,26 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Modal Container (rendered dynamically) -->
-  <div id="modal-container"></div>
+  <div id="modal-container" data-bugdrop-mask></div>
 
   <!-- =======================================================================
        Application JavaScript
        ======================================================================= -->
   <script src="/js/i18n.js"></script>
   <script src="/js/app.js"></script>
+  <script
+    id="planit-bugdrop"
+    src="https://bugdrop.neonwatty.workers.dev/widget.v1.js"
+    data-repo="jssturm/elevated-applicant-feedback"
+    data-button="false"
+    data-theme="auto"
+    data-screenshot="optional"
+    data-send-console-logs="false"
+    data-show-name="false"
+    data-show-email="false"
+    data-show-issue-link="never"
+    data-welcome="Describe the Plan-It problem. Screenshots are optional and are sent privately to our feedback intake through BugDrop."
+  ></script>
 
 <script>
   // Only load Vercel Analytics in production (skip local/dev 404 noise)

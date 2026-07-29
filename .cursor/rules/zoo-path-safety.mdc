@@ -2,7 +2,7 @@
 description: Path Safety (Zoo mandate)
 alwaysApply: true
 source: .roo/rules/00-paths.md
-syncedAt: 2026-07-27T17:34:09.031Z
+syncedAt: 2026-07-29T13:43:43.170Z
 ---
 
 # Path Safety

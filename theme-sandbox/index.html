@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plan-It BugDrop states</title>
+    <link rel="icon" href="data:," />
+    <style>
+      * { box-sizing: border-box; }
+      :root {
+        color-scheme: light dark;
+        --color-bg-primary: #ffffff;
+        --color-bg-card: #ffffff;
+        --color-border: #8a91a0;
+        --color-text-primary: #111827;
+        --color-text-secondary: #5f6675;
+        --color-accent: #4f5ef5;
+        --color-accent-muted: rgba(79, 94, 245, 0.1);
+        --color-text-inverse: #ffffff;
+      }
+      html.dark {
+        --color-bg-primary: #0f1117;
+        --color-bg-card: #1a1d24;
+        --color-border: #697180;
+        --color-text-primary: #f3f4f6;
+        --color-text-secondary: #b7bdc8;
+        --color-accent: #7c87ff;
+        --color-accent-muted: rgba(124, 135, 255, 0.16);
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 2rem;
+        background: var(--color-bg-primary);
+        color: var(--color-text-primary);
+        font: 16px/1.5 Inter, system-ui, sans-serif;
+      }
+      main { width: min(44rem, 100%); margin: auto; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .panel {
+        margin-top: 1.5rem;
+        padding: 1.25rem;
+        border: 1px solid var(--color-border);
+        border-radius: 0.75rem;
+        background: var(--color-bg-card);
+      }
+      .bug-report-fab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        padding: 0.35rem 0.35rem 0.35rem 0.75rem;
+        border: 1px solid var(--color-border);
+        border-radius: 9999px;
+        background: var(--color-bg-card);
+      }
+      .badge { color: var(--color-text-secondary); font-size: 0.75rem; font-weight: 600; }
+      button {
+        min-height: 44px;
+        padding: 0.55rem 0.85rem;
+        border: 1px solid var(--color-border);
+        border-radius: 9999px;
+        background: var(--color-accent-muted);
+        color: var(--color-text-primary);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover { background: var(--color-accent); color: var(--color-text-inverse); }
+      button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+      #state { color: var(--color-text-secondary); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="toolbar">
+        <h1>Plan-It private bug reporting</h1>
+        <button id="theme" type="button">Toggle light/dark</button>
+      </div>
+      <section class="panel">
+        <p>
+          The existing button opens BugDrop when ready. If the hosted widget cannot
+          load, the current preview-first GitHub reporter remains available.
+        </p>
+        <div class="bug-report-fab">
+          <span class="badge">· alpha</span>
+          <button id="report" type="button">🐛 Report a bug</button>
+        </div>
+        <p id="state" aria-live="polite">Simulated state: BugDrop ready.</p>
+        <p>
+          Screenshots are optional. Trip descriptions, addresses, preferences, and
+          generated plans are masked before supported screenshot capture.
+        </p>
+      </section>
+    </main>
+    <script>
+      var ready = true;
+      document.getElementById("report").addEventListener("click", function () {
+        document.getElementById("state").textContent = ready
+          ? "Would open BugDrop’s private, account-free report form."
+          : "Would open Plan-It’s existing GitHub fallback.";
+        ready = !ready;
+      });
+      document.getElementById("theme").addEventListener("click", function () {
+        document.documentElement.classList.toggle("dark");
+      });
+    </script>
+  </body>
+</html>

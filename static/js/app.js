@@ -1549,7 +1549,13 @@
     // Bug report button
     var $bugBtn = $("#btn-bug-report");
     if ($bugBtn) {
-      $bugBtn.addEventListener("click", openBugReport);
+      $bugBtn.addEventListener("click", function () {
+        if (window.BugDrop && typeof window.BugDrop.open === "function") {
+          window.BugDrop.open();
+          return;
+        }
+        openBugReport();
+      });
     }
   }
 
@@ -1577,7 +1583,7 @@
   function showModal(title, bodyHtml, onConfirm) {
     $modalContainer.innerHTML = `
       <div class="modal-backdrop" id="modal-backdrop">
-        <div class="modal">
+        <div class="modal" data-bugdrop-mask>
           <div class="modal-title">${escapeHtml(title)}</div>
           <div class="modal-body">${bodyHtml}</div>
           <div class="modal-footer">
@@ -1875,7 +1881,7 @@
   }
 
   /* ------------------------------------------------------------------------
-  Bug Reporter — pre-fills a GitHub issue on jssturm/Plan-It
+  Bug Reporter fallback — pre-fills a GitHub issue on jssturm/Plan-It
   ------------------------------------------------------------------------ */
 
   /**

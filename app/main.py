@@ -3,12 +3,13 @@
 import copy
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -397,6 +398,30 @@ def start_day(request: Request, payload: TravelRequest) -> dict:
 # Static file serving (mounted after API routes so they take precedence)
 # ---------------------------------------------------------------------------
 _static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+
+# Asset URLs in served HTML get a fingerprint query so a browser refetches CSS/JS
+# only when the file actually changes. Without it, cached styles survive updates.
+_ASSET_REF = re.compile(r'(?P<attr>href|src)="(?P<path>/(?:css|js)/[^"?]+)"')
+
+
+def _asset_fingerprint(url_path: str) -> str:
+    try:
+        return str(int(os.path.getmtime(os.path.join(_static_dir, url_path.lstrip("/")))))
+    except OSError:
+        return "0"
+
+
+def _html_with_versioned_assets(path: str) -> HTMLResponse:
+    with open(path, encoding="utf-8") as handle:
+        html = handle.read()
+    html = _ASSET_REF.sub(
+        lambda m: f'{m.group("attr")}="{m.group("path")}?v={_asset_fingerprint(m.group("path"))}"',
+        html,
+    )
+    # The document must revalidate, otherwise the new fingerprints stay invisible.
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
+
 if os.path.isdir(_static_dir):
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
@@ -405,7 +430,7 @@ if os.path.isdir(_static_dir):
         """Serve the main app UI."""
         app_path = os.path.join(_static_dir, "app.html")
         if os.path.isfile(app_path):
-            return FileResponse(app_path)
+            return _html_with_versioned_assets(app_path)
         return {"status": "ok", "note": "Plan-It — app UI not found"}
 
     @app.get("/{full_path:path}", dependencies=[], include_in_schema=False)
@@ -419,7 +444,7 @@ if os.path.isdir(_static_dir):
         # SPA fallback — serve index.html for client-side routes
         index_path = os.path.join(_static_dir, "index.html")
         if os.path.isfile(index_path):
-            return FileResponse(index_path)
+            return _html_with_versioned_assets(index_path)
         return {"status": "ok", "note": "Plan-It API — static UI not found"}
 else:
     @app.get("/", include_in_schema=False)

@@ -206,10 +206,11 @@
       "confirm.clearMessage": "This will remove every itinerary from your session. This cannot be undone.",
 
       // Bug Report
+      "bug.sectionLabel": "Feedback \u00B7 alpha",
       "bug.fab": "\uD83D\uDC1B Report a bug",
       "bug.title": "Report a bug \u00B7 alpha",
       "bug.placeholder": "What were you doing, and what went wrong?",
-      "bug.privacy": "Opens a GitHub issue you confirm \u2014 nothing is sent until you click. NEVER includes your CV, profile, application answers, or job URLs.",
+      "bug.privacy": "Fallback: opens a GitHub issue you confirm. It never includes your trip description, starting address, restaurant preferences, or generated itinerary.",
       "bug.cancel": "Cancel",
       "bug.openIssue": "Open GitHub issue",
       "bug.previewLabel": "Exactly what gets attached \u2014 review before sending \u2193",
@@ -407,10 +408,11 @@
       "confirm.clearMessage": "Esto eliminará todos los itinerarios de tu sesión. No se puede deshacer.",
 
       // Bug Report
+      "bug.sectionLabel": "Comentarios \u00B7 alfa",
       "bug.fab": "\uD83D\uDC1B Reportar error",
       "bug.title": "Reportar error \u00B7 alpha",
       "bug.placeholder": "¿Qué estabas haciendo y qué salió mal?",
-      "bug.privacy": "Abre un issue de GitHub que tú confirmas — nada se envía hasta que haces clic. NUNCA incluye tu CV, perfil, respuestas de solicitud ni URLs de trabajos.",
+      "bug.privacy": "Alternativa: abre un issue de GitHub que tú confirmas. Nunca incluye la descripción del viaje, dirección inicial, preferencias de restaurantes ni itinerario generado.",
       "bug.cancel": "Cancelar",
       "bug.openIssue": "Abrir issue en GitHub",
       "bug.previewLabel": "Exactamente lo que se adjunta — revisa antes de enviar \u2193",
