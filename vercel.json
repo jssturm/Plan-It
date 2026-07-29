@@ -1,11 +1,3 @@
 {
-  "buildCommand": "pip install -r requirements.txt",
-  "rewrites": [
-    { "source": "/health", "destination": "/api/index" },
-    { "source": "/travel", "destination": "/api/index" },
-    { "source": "/travel/(.*)", "destination": "/api/index" },
-    { "source": "/start-day", "destination": "/api/index" },
-    { "source": "/app", "destination": "/api/index" },
-    { "source": "/(.*)", "destination": "/api/index" }
-  ]
+  "buildCommand": "pip install -r requirements.txt"
 }

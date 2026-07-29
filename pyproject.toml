@@ -49,6 +49,9 @@ Issues      = "https://github.com/jssturm/Plan-It/issues"
 [project.scripts]
 plan-it = "app.cli:main"
 
+[tool.vercel]
+entrypoint = "app.main:app"
+
 [tool.setuptools.packages.find]
 include = ["app", "app.*"]
 
