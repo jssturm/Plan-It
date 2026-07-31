@@ -1,5 +1,5 @@
 ---
-description: Zoo auto-invocation policy — public repo safe (no proprietary Athena references)
+description: Zoo auto-invocation policy — public repo safe (no proprietary references)
 alwaysApply: true
 ---
 
@@ -12,13 +12,13 @@ alwaysApply: true
 - All `.cursor/rules/zoo-*.mdc` mandates are always active
 - Never tell the user to run `/zoo-*` to proceed
 - Never wait for workflow approval when intent is clear — start executing
-- **Never expose proprietary Project Athena content** — see `zoo-no-proprietary-exposure.mdc`
+- **Never add internal proprietary doctrine to this repo** — see `zoo-no-proprietary-exposure.mdc`
 
 ## Skills
 
 - All `.cursor/skills/zoo-*/` skills are **model-invoked**
 - When a task matches a skill's description, read and follow that skill's `SKILL.md` immediately
-- Do **not** load `zoo-athena-doctrine` in this public repo
+- Load only skills present in this repo; do **not** load internal-only skills from a private workspace
 
 ## Role adoption (automatic)
 

@@ -1,23 +1,26 @@
 ---
-description: Pre-Response Self-Audit (Zoo mandate)
+description: Pre-Response Self-Audit (public repo — generic governance language)
 alwaysApply: true
-source: .roo/rules/10-pre-response-checklist.md
-syncedAt: 2026-07-29T13:43:43.180Z
 ---
 
 # Pre-Response Self-Audit
 
 Before completing any task, verify:
 
-- [ ] **Munger:** Invert, incentives, Lollapalooza, competence, Darwin checks run
-- [ ] **Domain docs:** Read relevant docs if task touches domain/architecture/API/auth/security
+- [ ] **Governance:** For non-trivial work — alternatives considered, evidence cited,
+      success criteria stated, and human approval obtained before execution.
+      Informal "best path" advice is not a decision.
+- [ ] **Decision quality:** Inversion, incentives, competence limits, and a deliberate
+      search for disconfirming evidence
+- [ ] **Domain docs:** Read relevant docs if the task touches domain, architecture,
+      API, auth, or security
 - [ ] **Plan gate:** Plan presented and approved before non-tweak implementation
 - [ ] **Context economy:** Smallest reads used; long output summarized
 - [ ] **Three-failure:** Surfaced after 2 failures; `<LOOP_BREAK>` if needed
-- [ ] **KV shield:** State lock on every 3rd turn; 40-line terminal cap enforced
 - [ ] **Tool safety:** All required params present; no unchanged retries
 - [ ] **Anti-loop:** Paths verified before write; max 2 tool attempts
 - [ ] **Task state:** Todos updated; status clear (done/in_review/blocked); no dangling items
-- [ ] **Auto-critic** (code-tweaker): Build/typecheck/lint pass; spec adherence verified
+- [ ] **Auto-critic:** Build/typecheck/lint pass; spec adherence verified
 
-Write long output to `.scratch/`. Completion message: path + brief status + one recommended next command.
+Write long output to `.scratch/`. Completion message: path + brief status + one
+recommended next command.
