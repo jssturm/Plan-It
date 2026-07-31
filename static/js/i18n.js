@@ -110,6 +110,14 @@
       "schedule.reminderNone": "\uD83D\uDD14 None",
       "schedule.reminderMin": "\uD83D\uDD14 {min} min",
       "schedule.walkToHere": "\uD83D\uDEE3 Walk to here",
+      "schedule.walkFromPrev": "\uD83D\uDEB6 From previous stop",
+      "schedule.mapFromHere": "\uD83D\uDCCD Map from my location",
+      "schedule.mapFromHereHint": "Open walking directions from where you are now",
+      "schedule.tapToExpand": "Tap a stop for walking directions",
+      "schedule.locating": "Getting your location\u2026",
+      "schedule.mapOpened": "Opening walking directions",
+      "schedule.mapOpenedNoGeo": "Opening map (location unavailable \u2014 Maps may still use your position)",
+      "schedule.mapNoDestination": "This stop has no map destination yet.",
       "schedule.noItems": "No schedule items.",
 
       // Edit/Add Modal
@@ -312,6 +320,14 @@
       "schedule.reminderNone": "\uD83D\uDD14 Ninguno",
       "schedule.reminderMin": "\uD83D\uDD14 {min} min",
       "schedule.walkToHere": "\uD83D\uDEE3 Caminar hasta aquí",
+      "schedule.walkFromPrev": "\uD83D\uDEB6 Desde la parada anterior",
+      "schedule.mapFromHere": "\uD83D\uDCCD Mapa desde mi ubicación",
+      "schedule.mapFromHereHint": "Abrir indicaciones a pie desde donde estás",
+      "schedule.tapToExpand": "Toca una parada para ver indicaciones a pie",
+      "schedule.locating": "Obteniendo tu ubicación\u2026",
+      "schedule.mapOpened": "Abriendo indicaciones a pie",
+      "schedule.mapOpenedNoGeo": "Abriendo mapa (ubicación no disponible \u2014 Maps puede usar tu posición)",
+      "schedule.mapNoDestination": "Esta parada aún no tiene destino en el mapa.",
       "schedule.noItems": "Sin elementos en el horario.",
 
       // Edit/Add Modal

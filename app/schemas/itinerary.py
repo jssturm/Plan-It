@@ -86,6 +86,11 @@ class ScheduleItem(BaseModel):
         description="Google Maps walking directions URL from the previous schedule stop "
         "to this one within the venue (e.g. 'https://www.google.com/maps/dir/?api=1&origin=Congo+River+Rapids&destination=Kumba&travelmode=walking')",
     )
+    map_destination: Optional[str] = Field(
+        default=None,
+        description="Venue-qualified place name for this stop (e.g. 'Kumba, Busch Gardens Tampa'). "
+        "Used by the UI to open walking directions from the user's current location.",
+    )
     backup_plan: Optional[str] = Field(
         default=None,
         description="Fallback if this activity is closed, too crowded, or weather-impacted",
