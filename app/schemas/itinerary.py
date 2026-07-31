@@ -66,6 +66,10 @@ class ScheduleItem(BaseModel):
         ge=0,
         description="Expected wait time in minutes for this activity",
     )
+    wait_source: Optional[str] = Field(
+        default=None,
+        description="Origin of wait_time_min: 'live' / 'live_park_avg' (Queue-Times) or 'estimate'",
+    )
     restaurant: Optional[str] = Field(
         default=None,
         description="Recommended restaurant for this meal stop (e.g. 'Be Our Guest — French, $$, inside park')",

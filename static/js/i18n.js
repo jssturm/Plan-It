@@ -140,7 +140,11 @@
 
       // Totals
       // Crowd prediction
-      "crowd.predictedCrowd": "Predicted crowd: {level}/10",
+      "crowd.predictedCrowd": "Estimated crowd: {level}/10",
+      "crowd.estimatedCrowd": "Estimated crowd: {level}/10",
+      "crowd.liveCrowd": "Live crowd: {level}/10",
+      "crowd.liveSource": "based on current wait times · Queue-Times.com",
+      "crowd.estimateSource": "calendar estimate — not live",
       "crowd.packed": "Packed — expect long waits",
       "crowd.busy": "Busy — plan ahead",
       "crowd.moderate": "Moderate — good day to visit",
@@ -156,6 +160,7 @@
       // Badges
       "badge.walk": "{min} min walk",
       "badge.wait": "{min} min wait",
+      "badge.waitLive": "{min} min wait (live)",
       "badge.reminder": "{min} min",
       "badge.priority.high": "high",
       "badge.priority.medium": "medium",
@@ -342,7 +347,11 @@
 
       // Totals
       // Crowd prediction
-      "crowd.predictedCrowd": "Multitud prevista: {level}/10",
+      "crowd.predictedCrowd": "Multitud estimada: {level}/10",
+      "crowd.estimatedCrowd": "Multitud estimada: {level}/10",
+      "crowd.liveCrowd": "Multitud en vivo: {level}/10",
+      "crowd.liveSource": "según tiempos de espera actuales · Queue-Times.com",
+      "crowd.estimateSource": "estimación de calendario — no en vivo",
       "crowd.packed": "Lleno — espera largas colas",
       "crowd.busy": "Ocupado — planifica con antelación",
       "crowd.moderate": "Moderado — buen día para visitar",
@@ -358,6 +367,7 @@
       // Badges
       "badge.walk": "{min} min caminata",
       "badge.wait": "{min} min espera",
+      "badge.waitLive": "{min} min espera (en vivo)",
       "badge.reminder": "{min} min",
       "badge.priority.high": "alta",
       "badge.priority.medium": "media",
