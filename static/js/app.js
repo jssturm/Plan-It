@@ -169,7 +169,7 @@
             }
           }
 
-          if (mapUrl) {
+          if (mapUrl && isSafeExternalUrl(mapUrl)) {
             window.open(mapUrl, "_blank", "noopener,noreferrer");
             showToast(t("toast.reminderFiredMap", { time: item.time }), "info");
           } else {
@@ -1659,6 +1659,17 @@
       .replace(/>/g, gt)
       .replace(/"/g, quot)
       .replace(/'/g, apos);
+  }
+
+  /** Only allow http(s) for window.open / external navigation (blocks javascript:). */
+  function isSafeExternalUrl(url) {
+    if (!url || typeof url !== "string") return false;
+    try {
+      var parsed = new URL(url, window.location.origin);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch (e) {
+      return false;
+    }
   }
 
   /* ------------------------------------------------------------------------
