@@ -7,6 +7,7 @@ Repository-wide instructions for GitHub Copilot, generated from the Zoo rule bun
 ## Mandates
 
 - **Anti-Loop & Anti-Hallucination Shield** — Anti-Loop & Anti-Hallucination Shield (Zoo mandate)
+- **Auto-Critic Validation Gate** — Auto-critic validation gate — mandatory before implementation completions
 - **Auto-Invocation Policy** — Zoo auto-invocation policy — public repo safe (no proprietary references)
 - **Zoo Flow Inheritance** — Inherit Zoo Flow mandates from development hub (public repo — no proprietary content)
 - **Public Repo — No Proprietary Content** — Public repo guard — no internal proprietary content in this repo
@@ -44,6 +45,39 @@ Before `Write`/`StrReplace`/file-creating `Shell`:
 ## Traceback logging
 
 Before tool calls on paths, note internally: target path and attempt number (1 or 2). On attempt 2, state what changed from attempt 1.
+
+---
+
+# Auto-Critic Validation Gate
+
+**Mandatory before completing any implementation work.**
+
+## Must pass
+
+- Build/compile (if project has one)
+- Typecheck (if project has one)
+- Lint — zero new errors
+
+Max 2 fix cycles, then escalate to architect review.
+
+## Also check
+
+- Spec adherence against `.scratch/` plan
+- Path safety (verified paths only)
+- Risk assessment (Low/Medium/High)
+
+## Also check (quality gates)
+
+- **Explain** — can the reasoning be traced to evidence?
+- **Challenge** — were alternatives considered?
+- **Measure** — is success verifiable?
+- **Human judgment** — does this augment, not replace, the reviewer's judgment?
+
+## Skip only for
+
+- Throwaway prototypes
+- Documentation-only changes
+- Explicit user request — state reason
 
 ---
 
@@ -185,6 +219,15 @@ All skill and command paths are workspace-root paths.
 - Scratch output: `.scratch/{category}/{date}/{slug}/`
 
 Before any write/edit, verify the target path exists via `Glob` or `Read`. Never reference paths not observed in this session.
+
+## User-owned generated files
+
+Once a human has edited a generated file (PowerPoint, Word, designed HTML, PDF, or any generator output they then opened and changed), **that file is the source of truth**.
+
+- Do not regenerate it from a script or template to apply a later small change.
+- Patch the existing file (named slide, shape, or section only).
+- Do not copy generated output over their working copy (including Downloads or Desktop).
+- Full regenerate/replace only if they explicitly say to discard their edits.
 
 ---
 

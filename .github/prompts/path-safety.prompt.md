@@ -20,3 +20,12 @@ All skill and command paths are workspace-root paths.
 - Scratch output: `.scratch/{category}/{date}/{slug}/`
 
 Before any write/edit, verify the target path exists via `Glob` or `Read`. Never reference paths not observed in this session.
+
+## User-owned generated files
+
+Once a human has edited a generated file (PowerPoint, Word, designed HTML, PDF, or any generator output they then opened and changed), **that file is the source of truth**.
+
+- Do not regenerate it from a script or template to apply a later small change.
+- Patch the existing file (named slide, shape, or section only).
+- Do not copy generated output over their working copy (including Downloads or Desktop).
+- Full regenerate/replace only if they explicitly say to discard their edits.

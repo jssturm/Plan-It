@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/block-dangerous-git.sh",
+        "matcher": "git[^&|;]*push|reset[ ]+--hard|clean[ ]+-[a-zA-Z]*f|branch[ ]+-D|checkout[ ]+\\.|restore[ ]+\\.",
+        "timeout": 10,
+        "failClosed": true
+      }
+    ]
+  }
+}
