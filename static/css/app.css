@@ -825,6 +825,74 @@ ul, ol {
   padding-bottom: 0;
 }
 
+.timeline-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  border-radius: var(--radius-md, 8px);
+  transition: background var(--transition-fast);
+}
+
+.timeline-item-header:hover,
+.timeline-item-header:focus-visible {
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
+  outline: none;
+}
+
+.timeline-item-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.timeline-expand-icon {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  opacity: 0.55;
+  transition: transform var(--transition-fast);
+  margin-top: 0.35rem;
+}
+
+.timeline-item.is-expanded .timeline-expand-icon {
+  transform: rotate(180deg);
+}
+
+.timeline-item-body {
+  padding: var(--space-2) 0 var(--space-1);
+  animation: schedule-expand 160ms ease-out;
+}
+
+.timeline-item-body[hidden] {
+  display: none;
+}
+
+@keyframes schedule-expand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.schedule-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.schedule-map-actions .btn {
+  text-decoration: none;
+}
+
 .timeline-dot {
   position: absolute;
   left: calc(-1 * var(--space-8) + 7px);
@@ -1598,15 +1666,14 @@ ul, ol {
   border-color: var(--color-text-muted);
 }
 
-/* Editable schedule item */
+/* Editable schedule item — visible inside expanded stop body */
 .schedule-item-actions {
   display: flex;
   gap: var(--space-1);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+  opacity: 1;
 }
 
-.timeline-item:hover .schedule-item-actions {
+.timeline-item.is-expanded .schedule-item-actions {
   opacity: 1;
 }
 

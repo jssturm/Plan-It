@@ -200,6 +200,7 @@ def build_travel_plan(
 
     plan = {
         "venue_type": venue.get("venue_type", "general"),
+        "venue_name": intent.get("venue", ""),
         "departure_time": final_departure,
         "route": route,
         "schedule": schedule,
@@ -944,8 +945,48 @@ def _looks_international(origin: str, destination: str) -> bool:
     """
     combined = f"{origin} {destination}".lower()
     return any(signal in combined for signal in _INTERNATIONAL_SIGNALS)
+
+
+# ---------------------------------------------------------------------------
 # Schedule construction
 # ---------------------------------------------------------------------------
+
+
+def _venue_label(intent: dict[str, str]) -> str:
+    """Human-readable venue + location for Maps queries."""
+    venue = (intent.get("venue") or "").strip()
+    loc = (intent.get("location") or "").strip()
+    if loc and loc.lower() not in venue.lower():
+        return f"{venue} {loc}".strip()
+    return venue
+
+
+def _attraction_short_name(attraction: str) -> str:
+    """Strip tip suffixes like 'Ride — tip text' down to the place name."""
+    return attraction.split(" — ")[0].strip()
+
+
+def _map_destination(place: str, venue: str) -> str:
+    """Qualify a place name with venue context for reliable geocoding."""
+    place = (place or "").strip()
+    venue = (venue or "").strip()
+    if not place:
+        return venue
+    if venue and venue.lower() not in place.lower():
+        return f"{place}, {venue}"
+    return place
+
+
+def _walking_directions_url(origin_place: str, dest_place: str, venue: str = "") -> str:
+    """Build a Google Maps walking-directions URL between two in-venue places."""
+    origin = _map_destination(origin_place, venue)
+    dest = _map_destination(dest_place, venue)
+    return (
+        "https://www.google.com/maps/dir/?api=1"
+        f"&origin={urllib.parse.quote(origin, safe='')}"
+        f"&destination={urllib.parse.quote(dest, safe='')}"
+        "&travelmode=walking"
+    )
 
 
 def _build_schedule(
@@ -1012,6 +1053,7 @@ def _build_schedule(
         "meal_timing_note": None,
         "reminder_min": None,
         "walking_map_url": None,
+        "map_destination": _venue_label(intent) or None,
         "backup_plan": None,
     })
 
@@ -1026,6 +1068,7 @@ def _build_schedule(
             "meal_timing_note": None,
             "reminder_min": None,
             "walking_map_url": None,
+            "map_destination": _map_destination("entrance", _venue_label(intent)) or None,
             "backup_plan": None,
         })
 
@@ -1071,15 +1114,16 @@ def _build_schedule(
             priority = "low"
 
         is_lunch_slot = current_h in (11, 12, 13)
+        attr_short = _attraction_short_name(attraction)
+        venue_label = _venue_label(intent)
         action_text = f"Visit {attraction}"
         if tips and i == 0:
             action_text += f" — tip: {tips[0][:80]}"
 
         maps_url = None
-        if i > 0 and i - 1 < len(attractions):
-            prev = urllib.parse.quote(attractions[i - 1].split(" — ")[0], safe="")
-            curr = urllib.parse.quote(attraction.split(" — ")[0], safe="")
-            maps_url = f"https://www.google.com/maps/dir/?api=1&origin={prev}&destination={curr}&travelmode=walking"
+        if i > 0:
+            prev_short = _attraction_short_name(attractions[i - 1])
+            maps_url = _walking_directions_url(prev_short, attr_short, venue_label)
 
         schedule.append({
             "time": _fmt_time(current_h, current_m),
@@ -1091,7 +1135,8 @@ def _build_schedule(
             "meal_timing_note": "Beat the lunch crowd — dine early or after 1 PM" if is_lunch_slot else None,
             "reminder_min": None,
             "walking_map_url": maps_url,
-            "backup_plan": f"If {attraction.split(' — ')[0]} is closed or too crowded, explore nearby exhibits instead",
+            "map_destination": _map_destination(attr_short, venue_label),
+            "backup_plan": f"If {attr_short} is closed or too crowded, explore nearby exhibits instead",
         })
 
     # =========================================================================
