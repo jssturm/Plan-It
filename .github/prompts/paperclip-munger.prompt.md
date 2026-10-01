@@ -27,14 +27,11 @@ Be direct. Lead with conclusion.
 
 ## Research → Plan → Execute gate
 
-No execution without approved plan. Skip only for tweak-scope fixes.
+No execution without approved plan. Skip only for tweak-scope fixes **or** tickets labeled `desk-auto` (desk monitor): for those, write Alignment Review/ADR under `.scratch/` then execute in the same session without waiting for a human approve message. Human remains override (ntfy / close ticket / relabel `human-review`).
 
-Before editing non-tweak files:
-1. Confirm written plan was presented
-2. Confirm user explicitly approved
-3. If not, halt and present plan — do not code
+Still always ask before: `git commit` / `git push`, go-live, risk-limit ceiling breaches, secrets.
 
-Verbal go-ahead is not a substitute for a reviewed plan.
+Verbal go-ahead is not a substitute for a reviewed plan on unlabeled / `human-review` work.
 
 ## Task states
 
